@@ -1,3 +1,6 @@
+# Objective
+Compare existing data selection strategies and come up with a new method addressing its limitations.
+
 # Steps
 1. Data loading
 2. Calculate utility function
