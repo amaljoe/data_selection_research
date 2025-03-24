@@ -4,6 +4,9 @@ import pickle
 import torch
 from torch.nn import functional as F
 import os
+import numpy as np
+from dotenv import load_dotenv
+load_dotenv()
 
 cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "utility")
 
@@ -14,14 +17,15 @@ def get_delift_se_utility(prompts, references, dataset_name):
     if os.path.exists(cache_file):
         print(f'Utility: {utility_name} found in cache, loading from cache ✅')
         with open(cache_file, 'rb') as f:
-            return pickle.load(f)
+            return pickle.load(f), utility_name
     print(f'Utility: {utility_name} not found in cache, computing now 🏃')
     tensor = encode(prompts, references)
     utility =  compute_pairwise_similarities(tensor)
+    utility = np.array(utility)
     with open(cache_file, 'wb') as f:
         pickle.dump(utility, f)
     print(f'Utility: {utility_name} computed and saved to cache ✅')
-    return utility
+    return utility, utility_name
 
 def encode(prompts, references, embedding_model_name='BAAI/bge-large-en-v1.5'):
     tokenizer = AutoTokenizer.from_pretrained(embedding_model_name)
