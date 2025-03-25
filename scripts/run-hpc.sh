@@ -8,8 +8,11 @@ echo "Working directory: $HPC_USER@$HPC_HOST:$HPC_PATH"
 echo "Starting Rsync..."
 rsync -avz -e "ssh -p 4422" ./hpc-job.slurm $HPC_USER@$HPC_HOST:${HPC_PATH}/ || { echo "Rsync failed for hpc-job.slurm. Exiting."; exit 1; }
 if [[ ! " $@ " =~ " --no-rsync " ]]; then
+  echo "Syncing workspace"
   rsync -avz --delete -e "ssh -p 4422" ~/workspace $HPC_USER@$HPC_HOST:${HPC_PATH}/ || { echo "Rsync failed for envs. Exiting."; exit 1; }
-  rsync -avz --delete -e "ssh -p 4422" ~/miniconda3/envs $HPC_USER@$HPC_HOST:${HPC_PATH}/ || { echo "Rsync failed for workspace. Exiting."; exit 1; }
+#  rsync -avz --delete -e "ssh -p 4422" ~/miniconda3/envs $HPC_USER@$HPC_HOST:${HPC_PATH}/ || { echo "Rsync failed for workspace. Exiting."; exit 1; }
+  echo "Syncing .cache directory..."
+  rsync -avz --delete -e "ssh -p 4422" ~/.cache/huggingface/ $HPC_USER@$HPC_HOST:.cache/huggingface/ || { echo "Rsync failed for .cache. Exiting."; exit 1; }
 else
   echo "Skipping Rsync for envs and workspace as --no-rsync was provided."
 fi
@@ -33,3 +36,8 @@ done
 echo -e "Job running. Streaming output...\n\n"
 JOB_COMPLETE_MSG="-----Job completed-----"
 ssh -p 4422 $HPC_USER@$HPC_HOST "tail -f ${LOGS_FILE} | awk '/${JOB_COMPLETE_MSG}/ {print; exit} {print}'"
+
+echo -e "\n\nJob completed. Syncing back workspace files..."
+rsync -avz --ignore-existing -e "ssh -p 4422" $HPC_USER@$HPC_HOST:${HPC_PATH}/workspace/ ~/workspace/ || { echo "Rsync back failed. Exiting."; exit 1; }
+
+echo "Workspace files synced back successfully."

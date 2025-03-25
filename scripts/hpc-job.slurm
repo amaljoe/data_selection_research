@@ -10,7 +10,6 @@
 
 # Load Miniconda
 module load miniconda
-
 # Initialize Conda
 conda init
 source ~/.bashrc
