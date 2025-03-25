@@ -22,3 +22,7 @@ def get_mix_instruct(split, max_length):
     prompts = ds['instruction'] + "\n" + ds['input']
     references = ds['output']
     return list(prompts), list(references), ds_name
+
+if __name__ == "__main__":
+    prompts, references, ds_name = get_mix_instruct("train", 21000)
+    print(f"Dataset: {ds_name} loaded with {len(prompts)} samples")
