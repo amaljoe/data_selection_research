@@ -26,6 +26,9 @@ ssh -p 4422 $HPC_USER@$HPC_HOST "cd $HPC_PATH && sbatch hpc-job.slurm" | tee job
 JOB_ID=$(grep -oP '\d+' job_submission.log | tail -1)
 echo "Job submitted with ID: $JOB_ID. Waiting for output..."
 
+# Trap interrupt signal which will cancel job (ctrl+c)
+trap "echo -e '\nInterrupt detected. Cancelling job $JOB_ID...'; ssh -p 4422 $HPC_USER@$HPC_HOST 'scancel $JOB_ID'; exit 1" SIGINT
+
 LOGS_FILE=${HPC_PATH}/logs/slurm-${JOB_ID}.log
 # Wait for either temp log or final log to appear
 while ! ssh -p 4422 $HPC_USER@$HPC_HOST "[ -f ${LOGS_FILE} ]"; do

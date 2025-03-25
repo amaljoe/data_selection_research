@@ -57,11 +57,8 @@ def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch
         return final_responses, generation_name
 
 if __name__=='__main__':
+    print("Running parallel inference")
     from data_loader import get_mix_instruct
     prompts, references, ds_name = get_mix_instruct("train", 1000)
     model_name = "microsoft/Phi-3-mini-128k-instruct"
-    try:
-        responses, generation_name = generate_responses(prompts, model_name, ds_name)
-    except:
-        cleanup_distributed()
-        raise
+    responses, generation_name = generate_responses(prompts, model_name, ds_name)
