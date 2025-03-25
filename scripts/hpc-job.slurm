@@ -29,6 +29,10 @@ else
     conda activate $ENV_PATH
 fi
 
+export MASTER_PORT=11122
+export MASTER_ADDR=$(scontrol show hostname $SLURM_NODELIST | head -n 1)
+
+
 # Navigate to project workspace
 PROJECT="data_selection_research"
 cd $PLACE/workspace/$PROJECT
