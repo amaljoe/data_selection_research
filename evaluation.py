@@ -1,10 +1,6 @@
 from transformers import AutoTokenizer, AutoModel
-import numpy as np
 import torch
 import evaluate
-from prometheus_eval.vllm import VLLM
-from prometheus_eval import PrometheusEval
-from prometheus_eval.prompts import ABSOLUTE_PROMPT, SCORE_RUBRIC_TEMPLATE
 from tqdm import tqdm
 import pickle
 import os
@@ -89,4 +85,4 @@ if __name__ == '__main__':
     from inference import generate_responses
     prompts, references, ds_name = get_mix_instruct("train", 21000)
     responses, generation_name = generate_responses(prompts, "microsoft/Phi-3-mini-128k-instruct", ds_name, 'cuda:3', batch_size=64)
-    print(compute_metrics(responses[:10], references[:10], generation_name + '_10', device='cuda:3', bs_bge=512))
+    print(compute_metrics(responses[:20], references[:20], generation_name + '_20', device='cuda:3', bs_bge=512))

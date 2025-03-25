@@ -1,1 +1,1 @@
-python3 data_loader.py
+python3 evaluation.py
