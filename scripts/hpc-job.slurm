@@ -3,7 +3,7 @@
 #SBATCH --nodes=2                             # Number of nodes
 #SBATCH --ntasks-per-node=2
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:1                          # Number of GPUs per node
+#SBATCH --gres=gpu:2                          # Number of GPUs per node
 #SBATCH --mem=96G                             # Total memory per node
 #SBATCH --time=01:00:00                       # Time limit (hh:mm:ss)
 #SBATCH --partition=gpu                       # Partition name
@@ -30,7 +30,7 @@ else
     conda activate $ENV_PATH
 fi
 
-export MASTER_PORT=11122
+export MASTER_PORT=29500
 export MASTER_ADDR=$(scontrol show hostname $SLURM_NODELIST | head -n 1)
 
 
@@ -42,9 +42,10 @@ SCRIPT="run.sh"
 
 # Run the script and log results
 LOGFILE=${PLACE}/logs/slurm-${SLURM_JOB_ID}.log
-echo "-----Job started-----" > $LOGFILE
-echo "Running on: ${SLURM_NODELIST}" >> $LOGFILE
+echo -e "Job ${SLURM_JOB_ID} running on ${SLURM_NODELIST}\n" > $LOGFILE
+echo "-----Job started-----" >> $LOGFILE
 bash $SCRIPT >> $LOGFILE 2>&1
 echo "-----Job completed-----" >> $LOGFILE
+lsof -t ${LOGS_FILE} | xargs -r ps -p
 
 echo "Job completed"

@@ -36,11 +36,17 @@ while ! ssh -p 4422 $HPC_USER@$HPC_HOST "[ -f ${LOGS_FILE} ]"; do
     sleep 10
 done
 
-echo -e "Job running. Streaming output...\n\n"
+echo -e "Job running. Streaming output...\n"
 JOB_COMPLETE_MSG="-----Job completed-----"
-ssh -p 4422 $HPC_USER@$HPC_HOST "tail -f ${LOGS_FILE} | awk '/${JOB_COMPLETE_MSG}/ {print; exit} {print}'"
+#ssh -p 4422 $HPC_USER@$HPC_HOST "tail -n +1 -f ${LOGS_FILE} | awk '/${JOB_COMPLETE_MSG}/ {print; exit} {print}'"
+#ssh -p 4422 $HPC_USER@$HPC_HOST "tail -n +1 -f ${LOGS_FILE} | awk '{print; fflush()} /${JOB_COMPLETE_MSG}/ {print; exit}'"
+#ssh -p 4422 $HPC_USER@$HPC_HOST "tail -n +1 -f ${LOGS_FILE} | awk '{print} /${JOB_COMPLETE_MSG}/ {print; exit}'"
+#ssh -p 4422 $HPC_USER@$HPC_HOST "tail -n +1 -f ${LOGS_FILE} | grep --line-buffered -e '.*' -e '${JOB_COMPLETE_MSG}' && echo '${JOB_COMPLETE_MSG}'"
+#ssh -p 4422 $HPC_USER@$HPC_HOST "tail -n +1 -f ${LOGS_FILE} | stdbuf -o0 grep -e '.*' -e '${JOB_COMPLETE_MSG}' && echo '${JOB_COMPLETE_MSG}'"
+ssh -p 4422 $HPC_USER@$HPC_HOST "tail -n +1 -f ${LOGS_FILE}"
 
-echo -e "\n\nJob completed. Syncing back workspace files..."
+
+echo -e "\nJob completed. Syncing back workspace files..."
 rsync -avz --ignore-existing -e "ssh -p 4422" $HPC_USER@$HPC_HOST:${HPC_PATH}/workspace/ ~/workspace/ || { echo "Rsync back failed. Exiting."; exit 1; }
 
 echo "Workspace files synced back successfully."
