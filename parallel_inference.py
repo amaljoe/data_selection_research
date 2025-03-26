@@ -13,6 +13,7 @@ cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "generated_text
 
 def setup_distributed():
     dist.init_process_group(backend='nccl')
+    print(f"Setting up distributed on rank {dist.get_rank()}")
     torch.cuda.set_device(dist.get_rank())
 
 def cleanup_distributed():

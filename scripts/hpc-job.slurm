@@ -30,7 +30,7 @@ else
     conda activate $ENV_PATH
 fi
 
-export MASTER_PORT=29500
+export MASTER_PORT=11122
 export MASTER_ADDR=$(scontrol show hostname $SLURM_NODELIST | head -n 1)
 
 
@@ -46,6 +46,5 @@ echo -e "Job ${SLURM_JOB_ID} running on ${SLURM_NODELIST}\n" > $LOGFILE
 echo "-----Job started-----" >> $LOGFILE
 bash $SCRIPT >> $LOGFILE 2>&1
 echo "-----Job completed-----" >> $LOGFILE
-lsof -t ${LOGS_FILE} | xargs -r ps -p
 
 echo "Job completed"
