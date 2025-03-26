@@ -13,14 +13,16 @@ cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "generated_text
 
 def setup_distributed():
     dist.init_process_group(backend='nccl')
-    print(f"Setting up distributed on rank {dist.get_rank()}")
-    torch.cuda.set_device(dist.get_rank())
+    local_rank = int(os.environ["LOCAL_RANK"])
+    print(f"Setting up distributed on rank {dist.get_rank()} with local rank {local_rank}")
+    torch.cuda.set_device(local_rank)
 
 def cleanup_distributed():
     dist.destroy_process_group()
 
 
-def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch_size=8, max_length=512):
+def generate_responses(prompts, model_name, dataset_name, batch_size=8, max_length=512):
+    device = f'cuda:{os.environ['LOCAL_RANK']}'
     setup_distributed()
     model_name_short = model_name.split('/')[-1]
     generation_name = f'{dataset_name}_{model_name_short}'
@@ -40,7 +42,7 @@ def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch
     dataloader = DataLoader(prompts, batch_size=batch_size, sampler=sampler)
     all_responses = []
 
-    for batch in tqdm(dataloader, desc=f"Generating responses on GPU {dist.get_rank()}", position=dist.get_rank()):
+    for batch in tqdm(dataloader, desc=f"Generating responses on GPU {dist.get_rank()}"):
         inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True).to(device)
         with torch.no_grad():
             outputs = model.module.generate(**inputs, max_new_tokens=max_length, do_sample=False)
