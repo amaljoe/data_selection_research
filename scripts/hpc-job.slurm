@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=the_happening_place        # Job name
-#SBATCH --nodes=4                             # Number of nodes
+#SBATCH --nodes=2                             # Number of nodes
 #SBATCH --ntasks-per-node=2
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:2                          # Number of GPUs per node

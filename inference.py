@@ -21,6 +21,7 @@ def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch
     print(f'Generation: {generation_name} not found in cache, generating responses 🏃')
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, attn_implementation="flash_attention_2",torch_dtype=torch.bfloat16).to(device)
     dataloader = DataLoader(prompts, batch_size=batch_size, shuffle=False)
     all_responses = []

@@ -14,16 +14,18 @@ cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "generated_text
 def setup_distributed():
     dist.init_process_group(backend='nccl')
     local_rank = int(os.environ["LOCAL_RANK"])
-    print(f"Setting up distributed on rank {dist.get_rank()} with local rank {local_rank}")
     torch.cuda.set_device(local_rank)
+    device = torch.device(f'cuda:{local_rank}')
+    print(f"Setting up distributed GPU {torch.cuda.get_device_name(local_rank)}({device}) as rank {dist.get_rank()}")
+    return device
 
 def cleanup_distributed():
     dist.destroy_process_group()
 
 
 def generate_responses(prompts, model_name, dataset_name, batch_size=8, max_length=512):
-    device = f'cuda:{os.environ['LOCAL_RANK']}'
-    setup_distributed()
+    device = setup_distributed()
+    print()
     model_name_short = model_name.split('/')[-1]
     generation_name = f'{dataset_name}_{model_name_short}'
     cache_file = os.path.join(cache_dir, f"{generation_name}.pkl")
@@ -64,4 +66,4 @@ if __name__=='__main__':
     from data_loader import get_mix_instruct
     prompts, references, ds_name = get_mix_instruct("train", 1000)
     model_name = "microsoft/Phi-3-mini-128k-instruct"
-    responses, generation_name = generate_responses(prompts, model_name, ds_name)
+    responses, generation_name = generate_responses(prompts[:32], model_name, ds_name + "_32")
