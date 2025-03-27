@@ -28,3 +28,18 @@ def create_subset(data_sijs, utility_name, k=0.3):
         pickle.dump(subset, f)
     print(f'Subset: {subset_name} computed and saved to cache ✅')
     return subset, subset_name
+
+def get_subset(subset, prompts, references):
+    subset_indices = np.array(subset)[:, 0].astype(int)
+    subset_prompts = [prompts[i] for i in subset_indices]
+    subset_references = [references[i] for i in subset_indices]
+    return subset_prompts, subset_references
+
+if __name__ == '__main__':
+    from data_loader import get_mix_instruct
+    from utility_functions.delift_se import get_delift_se_utility
+
+    prompts, references, ds_name = get_mix_instruct("train", 1000)
+    utility, utility_name = get_delift_se_utility(prompts, references, ds_name)
+    subset, subset_name = create_subset(utility, utility_name)
+    s_prompts, s_references = get_subset(subset, prompts, references)
