@@ -197,12 +197,12 @@ if __name__=='__main__':
     from utility_functions.delift_se import get_delift_se_utility
     from subset import create_subset, get_subset
 
-    prompts, references, ds_name = get_mix_instruct("train", 210)
+    prompts, references, ds_name = get_mix_instruct("train", 21000)
     utility, utility_name = get_delift_se_utility(prompts, references, ds_name)
     subset, subset_name = create_subset(utility, utility_name)
     s_prompts, s_references = get_subset(subset, prompts, references)
 
-    prompts_val, references_val, ds_name_valid = get_mix_instruct("validation", 50)
+    prompts_val, references_val, ds_name_valid = get_mix_instruct("validation", 5000)
     base_model_id = 'meta-llama/Llama-3.2-3B'
     fine_tune_model(base_model_id, prompts, references, prompts_val, references_val, subset_name)
 
