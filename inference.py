@@ -9,7 +9,7 @@ load_dotenv()
 
 cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "generated_texts")
 
-def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch_size=8, max_length=512):
+def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch_size=8, max_length=100):
     model_name_short = model_name.split('/')[-1]
     generation_name = f'{dataset_name}_{model_name_short}'
     cache_file = os.path.join(cache_dir, f"{generation_name}.pkl")
@@ -20,7 +20,7 @@ def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch
             return pickle.load(f), generation_name
     print(f'Generation: {generation_name} not found in cache, generating responses 🏃')
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, padding_side="left")
     tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, attn_implementation="flash_attention_2",torch_dtype=torch.bfloat16).to(device)
     dataloader = DataLoader(prompts, batch_size=batch_size, shuffle=False)
@@ -29,7 +29,8 @@ def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch
     for batch in tqdm(dataloader, desc="Generating responses"):
         inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True).to(device)
         with torch.no_grad():
-            outputs = model.generate(**inputs, max_new_tokens=max_length, do_sample=False)
+            outputs = model.generate(**inputs, max_new_tokens=max_length)
+        outputs = outputs[:, inputs['input_ids'].shape[1]:]
         responses = [tokenizer.decode(output, skip_special_tokens=True) for output in outputs]
         all_responses.extend(responses)
 
