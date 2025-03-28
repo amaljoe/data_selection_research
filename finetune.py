@@ -13,17 +13,19 @@ load_dotenv()
 cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "models")
 
 
-def fine_tune_model(base_model_id, prompts, references, prompts_val, references_val, subset_name):
+def fine_tune_model(base_model_id, prompts, references, prompts_val, references_val, subset_name, use_cache=True):
     model_name = f"{base_model_id.split('/')[-1]}_{subset_name}"
     model_dir = os.path.join(cache_dir, model_name)
 
     os.makedirs(os.path.dirname(model_dir), exist_ok=True)
 
-    if os.path.exists(model_dir):
+    if os.path.exists(model_dir) and use_cache:
         print(f"Finetune: Fine-tuned model found in cache. Skipping Training ✅")
         return model_dir
-
-    print(f"Finetune: Fine-tuned model not found in cache. Training now 🏃")
+    elif os.path.exists(model_dir) and not use_cache:
+        print(f"Finetune: Fine-tuned model found in cache. Invalidating cache and training now 🏃")
+    else:
+        print(f"Finetune: Fine-tuned model not found in cache. Training now 🏃")
 
     quant_storage_dtype = torch.bfloat16
     bnb_config = BitsAndBytesConfig(
@@ -108,27 +110,6 @@ def fine_tune_model(base_model_id, prompts, references, prompts_val, references_
     )
 
     max_seq_length = 1024
-    training_arguments = TrainingArguments(
-        output_dir=model_dir,
-        num_train_epochs=20,
-        per_device_train_batch_size=1,
-        per_device_eval_batch_size=1,
-        gradient_accumulation_steps=1,
-        eval_accumulation_steps=1,
-        evaluation_strategy="no",
-        eval_steps=10,
-        save_strategy="no",
-        save_steps=500,
-        learning_rate=2.5e-5,
-        bf16=True,
-        logging_steps=10,
-        optim="paged_adamw_8bit",
-        lr_scheduler_type="constant",
-        weight_decay=0.01,
-        report_to="tensorboard",
-        gradient_checkpointing=True,
-        gradient_checkpointing_kwargs={'use_reentrant':True},
-    )
 
     sft_config = SFTConfig(
         max_seq_length=max_seq_length,
@@ -140,14 +121,14 @@ def fine_tune_model(base_model_id, prompts, references, prompts_val, references_
             "append_concat_token": False,  # No need to add additional separator token
         },
         output_dir=model_dir,
-        num_train_epochs=20,
-        per_device_train_batch_size=1,
-        per_device_eval_batch_size=1,
+        num_train_epochs=24,
+        per_device_train_batch_size=24,
+        per_device_eval_batch_size=8,
         gradient_accumulation_steps=1,
         eval_accumulation_steps=1,
-        evaluation_strategy="no",
-        eval_steps=10,
-        save_strategy="no",
+        evaluation_strategy="steps",
+        eval_steps=500,
+        save_strategy="steps",
         save_steps=500,
         learning_rate=2.5e-5,
         bf16=True,
@@ -202,7 +183,7 @@ if __name__=='__main__':
     subset, subset_name = create_subset(utility, utility_name)
     s_prompts, s_references = get_subset(subset, prompts, references)
 
-    prompts_val, references_val, ds_name_valid = get_mix_instruct("validation", 5000)
+    prompts_val, references_val, ds_name_valid = get_mix_instruct("validation", 50)
     base_model_id = 'meta-llama/Llama-3.2-3B'
     fine_tune_model(base_model_id, prompts, references, prompts_val, references_val, subset_name)
 
