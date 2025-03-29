@@ -7,7 +7,7 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from transformers import BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer, EvalPrediction, TrainingArguments, \
-    TrainerCallback, get_scheduler, DataCollatorWithPadding
+    TrainerCallback, get_scheduler, DataCollatorWithPadding, DataCollatorForLanguageModeling, LlamaForCausalLM
 import torch
 from tqdm import tqdm
 from bert_score import score as bert_score
@@ -276,21 +276,21 @@ def fine_tune_loop(base_model_id, prompts, references, prompts_val, references_v
     valid_texts = formatting_prompts_func(prompts_val, references_val)
 
     train_dataset = Dataset.from_dict({"text": train_texts})
-    valid_dataset = Dataset.from_dict({"text": valid_texts})
+    valid_dataset = Dataset.from_dict({"text": valid_texts, "references": references_val})
 
     def preprocess_function(examples):
         inputs = tokenizer(examples["text"], truncation=True)
-        inputs["labels"] = [input_ids[1:] + [tokenizer.pad_token_id] for input_ids in inputs["input_ids"]]
         return inputs
 
     train_dataset = train_dataset.map(preprocess_function, batched=True)
     valid_dataset = valid_dataset.map(preprocess_function, batched=True)
 
-    train_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
-    valid_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
+    train_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask'])
+    valid_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask'])
 
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
     train_dataloader = DataLoader(train_dataset, batch_size=24, shuffle=True, collate_fn=data_collator)
+    tokenizer.padding_side = "left"
     valid_dataloader = DataLoader(valid_dataset, batch_size=24, collate_fn=data_collator)
 
     # Optimizer & Scheduler
@@ -305,6 +305,8 @@ def fine_tune_loop(base_model_id, prompts, references, prompts_val, references_v
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
+
+    print(next(iter(train_dataloader)))
 
     # Training Loop
     num_epochs = 1
@@ -335,9 +337,8 @@ def fine_tune_loop(base_model_id, prompts, references, prompts_val, references_v
                 batch = {k: torch.tensor(v).to(device) for k, v in batch.items()}
                 outputs = model.generate(input_ids=batch['input_ids'], attention_mask=batch['attention_mask'], max_new_tokens=128)
                 decoded_preds = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-                decoded_refs = tokenizer.batch_decode(batch['labels'], skip_special_tokens=True)
                 predictions.extend(decoded_preds)
-                references.extend(decoded_refs)
+                references.extend(batch['references'])
                 loss = model(**batch).loss
                 total_val_loss += loss.item()
         avg_val_loss = total_val_loss / len(valid_dataloader)
