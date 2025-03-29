@@ -1,7 +1,8 @@
 import evaluate
 from datasets import Dataset
 from peft import LoraConfig
-from transformers import BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer, EvalPrediction, TrainingArguments
+from transformers import BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer, EvalPrediction, TrainingArguments, \
+    TrainerCallback
 import torch
 from bert_score import score as bert_score
 import numpy as np
@@ -11,6 +12,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "models")
+
+# class ProfCallback(TrainerCallback):
+#     def __init__(self, prof):
+#         self.prof = prof
+#
+#     def on_step_end(self, args, state, control, **kwargs):
+#         self.prof.step()
 
 
 def fine_tune_model(base_model_id, prompts, references, prompts_val, references_val, subset_name, use_cache=True):
@@ -106,6 +114,12 @@ def fine_tune_model(base_model_id, prompts, references, prompts_val, references_
 
     max_seq_length = 1024
 
+    prof = torch.profiler.profile(
+        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/resnet18'),
+        record_shapes=True,
+        with_stack=True)
+
     sft_config = SFTConfig(
         max_seq_length=max_seq_length,
         packing=True,
@@ -116,15 +130,16 @@ def fine_tune_model(base_model_id, prompts, references, prompts_val, references_
             "append_concat_token": False,  # No need to add additional separator token
         },
         output_dir=model_dir,
-        num_train_epochs=24,
+        num_train_epochs=3,
         per_device_train_batch_size=24,
         per_device_eval_batch_size=24,
         gradient_accumulation_steps=1,
         eval_accumulation_steps=1,
-        evaluation_strategy="steps",
-        eval_steps=1,
+        eval_strategy="steps",
+        eval_steps=10,
         save_strategy="steps",
-        save_steps=500,
+        save_steps=10,
+        save_total_limit=3,
         learning_rate=2.5e-5,
         bf16=True,
         logging_steps=10,
@@ -134,6 +149,9 @@ def fine_tune_model(base_model_id, prompts, references, prompts_val, references_
         report_to="tensorboard",
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={'use_reentrant':True},
+        load_best_model_at_end=True,  # Load the best model at the end for inference
+        metric_for_best_model="rouge1",  # Choose based on the evaluation metric
+        greater_is_better=True,
     )
 
 
@@ -147,13 +165,17 @@ def fine_tune_model(base_model_id, prompts, references, prompts_val, references_
         args=sft_config,
     )
 
+    # trainer.add_callback(ProfCallback(prof))
+
     if trainer.accelerator.is_main_process:
         trainer.model.print_trainable_parameters()
 
     ##########################
     # Train model
     ##########################
+    # prof.start()
     trainer.train()
+    # prof.stop()
 
     ##########################
     # SAVE MODEL FOR SAGEMAKER
@@ -173,14 +195,14 @@ if __name__=='__main__':
     from utility_functions.delift_se import get_delift_se_utility
     from subset import create_subset, get_subset
 
-    prompts, references, ds_name = get_mix_instruct("train", 210)
+    prompts, references, ds_name = get_mix_instruct("train", 21000)
     utility, utility_name = get_delift_se_utility(prompts, references, ds_name)
-    subset, subset_name = create_subset(utility, utility_name)
+    subset, subset_name = create_subset(utility, utility_name, k=1)
     s_prompts, s_references = get_subset(subset, prompts, references)
 
     prompts_val, references_val, ds_name_valid = get_mix_instruct("validation", 50)
     base_model_id = 'meta-llama/Llama-3.2-3B'
     # base_model_id = 'cache/models/Llama-3.2-3B_mix-instruct_train_21000_delift-se_0.3'
-    fine_tune_model(base_model_id, prompts, references, prompts_val, references_val, subset_name, use_cache=False)
+    fine_tune_model(base_model_id, s_prompts, s_references, prompts_val, references_val, ds_name, use_cache=False)
 
 # {'eval_loss': 2.4013614654541016, 'eval_rouge1': 0.5915068179332093, 'eval_runtime': 17.7148, 'eval_samples_per_second': 2.822, 'eval_steps_per_second': 0.395, 'eval_mean_token_accuracy': 0.5173488073050976, 'epoch': 1.0}
