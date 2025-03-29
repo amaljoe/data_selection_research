@@ -234,6 +234,163 @@ def get_data_loaders(prompts, references, subset, bs, formatting_fn, preprocess_
         data_loaders.append(dl)
     return data_loaders
 
+def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_val, subset_name, use_cache=True):
+    model_name = f"{base_model_id.split('/')[-1]}_{subset_name}"
+    model_dir = os.path.join(cache_dir, model_name)
+
+    os.makedirs(os.path.dirname(model_dir), exist_ok=True)
+
+    if os.path.exists(model_dir) and use_cache:
+        print(f"Finetune: Fine-tuned model found in cache. Skipping Training ✅")
+        return model_dir
+    elif os.path.exists(model_dir) and not use_cache:
+        print(f"Finetune: Fine-tuned model found in cache. Invalidating cache and training now 🏃")
+    else:
+        print(f"Finetune: Fine-tuned model not found in cache. Training now 🏃")
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    writer = SummaryWriter(log_dir=os.path.join(model_dir, "runs", timestamp))
+
+    # Model setup
+    quant_storage_dtype = torch.bfloat16
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_quant_storage=quant_storage_dtype,
+    )
+
+    model = AutoModelForCausalLM.from_pretrained(
+        base_model_id,
+        quantization_config=bnb_config,
+        trust_remote_code=True,
+        attn_implementation="flash_attention_2",
+        torch_dtype=quant_storage_dtype,
+        use_cache=False,
+        device_map='auto'
+    )
+
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant":False})
+
+    tokenizer = AutoTokenizer.from_pretrained(base_model_id)
+    tokenizer.pad_token = tokenizer.eos_token
+
+    # PEFT Configuration
+    peft_config = LoraConfig(
+        r=8,
+        lora_alpha=32,
+        target_modules="all-linear",
+        bias="none",
+        lora_dropout=0.1,
+        task_type="CAUSAL_LM",
+    )
+    model = get_peft_model(model, peft_config)
+
+    # Prepare dataset
+    valid_texts = formatting_prompts_func(prompts_val, references_val)
+    valid_dataset = Dataset.from_dict({"text": valid_texts, "references": references_val})
+
+    def preprocess_function(examples):
+        inputs = tokenizer(examples["text"], truncation=True)
+        return inputs
+
+    def valid_preprocess_function(examples):
+        inputs = tokenizer(examples["text"], truncation=True, padding=True, padding_side="left", max_length=200)
+        return inputs
+
+    valid_dataset = valid_dataset.map(valid_preprocess_function, batched=True)
+    valid_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask'], output_all_columns=True)
+
+    train_bs = 128
+    valid_bs = 32
+
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+    train_dataloaders = get_data_loaders(prompts, references, subset, train_bs, formatting_prompts_func, preprocess_function, data_collator)
+
+    tokenizer.padding_side = "left"
+    valid_dataloader = DataLoader(valid_dataset, batch_size=valid_bs)
+
+
+    # Optimizer & Scheduler
+    num_epochs = 1
+
+
+    optimizer = AdamW(model.parameters(), lr=2.5e-5, weight_decay=0.01)
+    num_batches = len(sum([len(d) for d in train_dataloaders]))
+    num_training_steps = num_batches * num_epochs
+    lr_scheduler = get_scheduler(
+        name="constant",
+        optimizer=optimizer,
+        num_warmup_steps=0,
+        num_training_steps=num_training_steps
+    )
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+
+    rouge = evaluate.load('rouge')
+
+    # Training Loop
+    eval_steps = 50
+
+    def train_step(batch, step):
+        batch = {k: v.to(device) for k, v in batch.items()}
+        outputs = model(**batch)
+        loss = outputs.loss
+        loss.backward()
+        optimizer.step()
+        lr_scheduler.step()
+        optimizer.zero_grad()
+        writer.add_scalar("train/loss", loss.item(), epoch * num_batches + step)
+        writer.add_scalar("train/epoch", epoch + step / num_batches, epoch * num_batches + step)
+        return loss.item()
+
+    def validation(step):
+        model.eval()
+        predictions, references = [], []
+        with torch.no_grad():
+            for batch_valid in tqdm(valid_dataloader, desc='Validating...'):
+                batch_valid = {k: v.to(device) if k in ['input_ids', 'attention_mask', 'labels'] else v for k, v in batch_valid.items()}
+                outputs_valid = model.generate(input_ids=batch_valid['input_ids'], attention_mask=batch_valid['attention_mask'], max_new_tokens=128)
+                decoded_preds = tokenizer.batch_decode(outputs_valid, skip_special_tokens=True)
+                predictions.extend(decoded_preds)
+                references.extend(batch_valid['references'])
+        rouge_scores = rouge.compute(predictions=predictions, references=references)
+        writer.add_scalar("eval/rouge1", rouge_scores['rouge1'], epoch * num_batches + step)
+        print(f"Validation ROUGE-1: {rouge_scores['rouge1']:.4f}")
+        model.train()
+
+    dataloader_iters = [iter(dl) for dl in train_dataloaders]
+
+    for epoch in range(num_epochs):
+        print(f'Epoch {epoch + 1}/{num_epochs}')
+        model.train()
+        total_loss = 0
+        loop = tqdm(range(num_batches), leave=True)
+        for step in loop:
+            try:
+                index = step % len(train_dataloaders)
+                batch = next(dataloader_iters[index])
+            except StopIteration:
+                dataloader_iters[index] = iter(dataloader_iters[index])
+                batch = next(dataloader_iters[index])
+            if step % eval_steps == 0:
+                validation(step)
+            loss = train_step(batch, step)
+            total_loss += loss
+            loop.set_description(f"Loss: {loss:.4f}")
+        print(f"Epoch {epoch + 1}, Loss: {total_loss / num_batches}")
+
+    # Save model
+    print("Training complete. Saving model.")
+    writer.close()
+    model.save_pretrained(model_dir)
+    tokenizer.save_pretrained(model_dir)
+
+    del model
+    torch.cuda.empty_cache()
+    return model_dir
 
 
 def fine_tune_loop(base_model_id, prompts, references, prompts_val, references_val, subset_name, use_cache=True):
