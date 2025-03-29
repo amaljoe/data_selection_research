@@ -1,4 +1,5 @@
 import os
+import random
 from datetime import datetime
 import evaluate
 import numpy as np
@@ -13,6 +14,8 @@ from tqdm import tqdm
 from transformers import BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer, EvalPrediction, get_scheduler, \
     DataCollatorForLanguageModeling
 from trl import SFTTrainer, SFTConfig
+
+from dynamic_weights import DynamicWeights
 
 load_dotenv()
 
@@ -317,7 +320,7 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
 
 
     optimizer = AdamW(model.parameters(), lr=2.5e-5, weight_decay=0.01)
-    num_batches = len(sum([len(d) for d in train_dataloaders]))
+    num_batches = sum([len(d) for d in train_dataloaders])
     num_training_steps = num_batches * num_epochs
     lr_scheduler = get_scheduler(
         name="constant",
@@ -362,7 +365,7 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
         model.train()
 
     dataloader_iters = [iter(dl) for dl in train_dataloaders]
-
+    dynamic_weights = DynamicWeights([1 / len(dataloader_iters) for _ in range(len(dataloader_iters))])
     for epoch in range(num_epochs):
         print(f'Epoch {epoch + 1}/{num_epochs}')
         model.train()
@@ -370,15 +373,18 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
         loop = tqdm(range(num_batches), leave=True)
         for step in loop:
             try:
-                index = step % len(train_dataloaders)
+                index = random.choices(np.arange(len(dataloader_iters)), weights=dynamic_weights.weights)[0]
                 batch = next(dataloader_iters[index])
             except StopIteration:
-                dataloader_iters[index] = iter(dataloader_iters[index])
+                dataloader_iters[index] = iter(train_dataloaders[index])
                 batch = next(dataloader_iters[index])
-            if step % eval_steps == 0:
+            if step % eval_steps == 0 or step == num_batches - 1:
                 validation(step)
             loss = train_step(batch, step)
             total_loss += loss
+            probs = dynamic_weights.update(index, loss, epoch * num_batches + step + 1)
+            for i, p in enumerate(probs):
+                writer.add_scalar(f"weights/domain_{i}", p, epoch * num_batches + step)
             loop.set_description(f"Loss: {loss:.4f}")
         print(f"Epoch {epoch + 1}, Loss: {total_loss / num_batches}")
 
@@ -558,6 +564,6 @@ if __name__=='__main__':
     prompts_val, references_val, ds_name_valid = get_mix_instruct("validation", 50)
     base_model_id = 'meta-llama/Llama-3.2-3B'
     # base_model_id = 'cache/models/Llama-3.2-3B_mix-instruct_train_21000_delift-se_0.3'
-    fine_tune_loop(base_model_id, s_prompts, s_references, prompts_val, references_val, ds_name, use_cache=False)
+    fine_tune_odm(base_model_id, s_prompts, s_references, prompts_val, references_val, ds_name, use_cache=False)
 
 # {'eval_loss': 2.4013614654541016, 'eval_rouge1': 0.5915068179332093, 'eval_runtime': 17.7148, 'eval_samples_per_second': 2.822, 'eval_steps_per_second': 0.395, 'eval_mean_token_accuracy': 0.5173488073050976, 'epoch': 1.0}
