@@ -1,3 +1,4 @@
+from datasets import Dataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -24,15 +25,26 @@ def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch
         print(f'Generation: {generation_name} not found in cache, generating responses 🏃')
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, padding_side="left")
-    # tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16).to(device)
+    def formatting_prompts_func(prompts):
+        return [
+            f"""Below is an instruction that describes a task. Write a response that appropriately completes the request.
+
+{prompt}
+
+### Response:
+"""
+            for prompt in prompts
+        ]
+    prompts = formatting_prompts_func(prompts)
     dataloader = DataLoader(prompts, batch_size=batch_size, shuffle=False)
     all_responses = []
 
     for batch in tqdm(dataloader, desc="Generating responses"):
         inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True).to(device)
         with torch.no_grad():
-            outputs = model.generate(**inputs, max_new_tokens=max_length, min_p=0.1, temperature=0.2,)
+            outputs = model.generate(**inputs, max_new_tokens=max_length, min_p=0.1, temperature=0.2)
         new_tokens = outputs[:, inputs.input_ids.shape[1]:]
         batch_gen_texts = tokenizer.batch_decode(new_tokens, skip_special_tokens=True)
         batch_gen_texts = [gen_text.replace("\n", " ") for gen_text in batch_gen_texts]
@@ -44,20 +56,14 @@ def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch
     return all_responses, generation_name
 
 if __name__ == '__main__':
-    from finetune import fine_tune_model
     from data_loader import get_mix_instruct
-    from utility_functions.delift_se import get_delift_se_utility
-    from subset import create_subset, get_subset
     from inference import generate_responses
     from evaluation import compute_metrics
 
     device = 'cuda:0'
 
-    prompts, references, ds_name = get_mix_instruct("train", 21000)
-    utility, utility_name = get_delift_se_utility(prompts, references, ds_name)
-    subset, subset_name = create_subset(utility, utility_name)
-    s_prompts, s_references = get_subset(subset, prompts, references)
     prompts_val, references_val, ds_name_valid = get_mix_instruct("validation", 5000)
-    model_dir = fine_tune_model('meta-llama/Llama-3.2-3B', prompts, references, prompts_val, references_val, subset_name)
-    responses_val_llama_ft, generation_name_llama_ft = generate_responses(prompts_val, model_dir, ds_name_valid, device, batch_size=400)
+    # model_dir = 'cache/models/Llama-3.2-3B_mix-instruct_train_21000_delift-se_0.3'
+    model_dir = 'meta-llama/Llama-3.2-3B'
+    responses_val_llama_ft, generation_name_llama_ft = generate_responses(prompts_val, model_dir, ds_name_valid, device, batch_size=400, use_cache=False)
     compute_metrics(responses_val_llama_ft, references_val, generation_name_llama_ft, device=device)

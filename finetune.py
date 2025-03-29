@@ -60,6 +60,9 @@ def fine_tune_model(base_model_id, prompts, references, prompts_val, references_
         logits, labels = p
         logits = np.argmax(logits, axis=-1)
         predictions = tokenizer.batch_decode(logits, skip_special_tokens=True)
+        import pickle
+        with open("cache/misc/pred_val.pkl", "wb") as f:
+            pickle.dump(predictions, f)
         labels[labels < 0] = tokenizer.eos_token_id
         references = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
@@ -67,17 +70,9 @@ def fine_tune_model(base_model_id, prompts, references, prompts_val, references_
         rouge = evaluate.load('rouge')
         rouge_scores = rouge.compute(predictions=predictions, references=references)
 
-        # Compute BERTScore
-        P, R, F1 = bert_score(predictions, references, lang='en', rescale_with_baseline=True, batch_size=32)
-
         # Return combined metrics
         return {
-            'bertscore_precision': P.mean().item(),
-            'bertscore_recall': R.mean().item(),
-            'bertscore_f1': F1.mean().item(),
-            'rouge1': rouge_scores['rouge1'],
-            'rouge2': rouge_scores['rouge2'],
-            'rougeL': rouge_scores['rougeL'],
+            'rouge1': rouge_scores['rouge1']
         }
 
     def formatting_prompts_func(prompts, references):
@@ -123,11 +118,11 @@ def fine_tune_model(base_model_id, prompts, references, prompts_val, references_
         output_dir=model_dir,
         num_train_epochs=24,
         per_device_train_batch_size=24,
-        per_device_eval_batch_size=8,
+        per_device_eval_batch_size=24,
         gradient_accumulation_steps=1,
         eval_accumulation_steps=1,
         evaluation_strategy="steps",
-        eval_steps=500,
+        eval_steps=1,
         save_strategy="steps",
         save_steps=500,
         learning_rate=2.5e-5,
@@ -178,12 +173,14 @@ if __name__=='__main__':
     from utility_functions.delift_se import get_delift_se_utility
     from subset import create_subset, get_subset
 
-    prompts, references, ds_name = get_mix_instruct("train", 21000)
+    prompts, references, ds_name = get_mix_instruct("train", 210)
     utility, utility_name = get_delift_se_utility(prompts, references, ds_name)
     subset, subset_name = create_subset(utility, utility_name)
     s_prompts, s_references = get_subset(subset, prompts, references)
 
     prompts_val, references_val, ds_name_valid = get_mix_instruct("validation", 50)
     base_model_id = 'meta-llama/Llama-3.2-3B'
-    fine_tune_model(base_model_id, prompts, references, prompts_val, references_val, subset_name)
+    # base_model_id = 'cache/models/Llama-3.2-3B_mix-instruct_train_21000_delift-se_0.3'
+    fine_tune_model(base_model_id, prompts, references, prompts_val, references_val, subset_name, use_cache=False)
 
+# {'eval_loss': 2.4013614654541016, 'eval_rouge1': 0.5915068179332093, 'eval_runtime': 17.7148, 'eval_samples_per_second': 2.822, 'eval_steps_per_second': 0.395, 'eval_mean_token_accuracy': 0.5173488073050976, 'epoch': 1.0}

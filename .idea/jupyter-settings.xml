@@ -12,6 +12,7 @@
               <option name="environmentVariables">
                 <map>
                   <entry name="CACHE_DIR" value="./cache" />
+                  <entry name="CUDA_VISIBLE_DEVICES" value="3" />
                 </map>
               </option>
             </JupyterConnectionParameters>

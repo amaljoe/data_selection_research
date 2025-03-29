@@ -52,7 +52,7 @@ def evaluate_bge(predictions, references, device, batch_size):
     return np.mean(metrics)
 
 
-def compute_metrics(predictions, references, generation_name, device='cuda:0', bs_bge=512, bs_rouge=4096, metrics=['bge', 'rouge']):
+def compute_metrics(predictions, references, generation_name, device='cuda:0', bs_bge=512, bs_rouge=4096, metrics=['bge', 'rouge'], use_cache=True):
     valid_metrics = set(['bge', 'rouge'])
     metrics_dict = {}
     for metric in metrics:
@@ -65,12 +65,15 @@ def compute_metrics(predictions, references, generation_name, device='cuda:0', b
         metric_name = f'{generation_name}_{metric}'
         cache_file = os.path.join(cache_dir, f"{metric_name}.pkl")
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-        if os.path.exists(cache_file):
+        if os.path.exists(cache_file) and use_cache:
             print(f'Evaluate: {metric_name} found in cache, loading from cache ✅')
             with open(cache_file, 'rb') as f:
                 metrics[metric] = pickle.load(f)
         else:
-            print(f'Evaluate: {metric_name} not found in cache, computing now 🏃')
+            if os.path.exists(cache_file):
+                print(f'Evaluate: {metric_name} found in cache. Invalidating cache and recomputing now 🏃')
+            else:
+                print(f'Evaluate: {metric_name} not found in cache, computing now 🏃')
             if metric == 'rouge':
                 metrics[metric] = evaluate_rouge(predictions, references, bs_rouge)
             elif metric == 'bge':
