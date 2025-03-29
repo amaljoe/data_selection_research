@@ -208,16 +208,6 @@ def formatting_prompts_func(prompts, references):
         for prompt, reference in zip(prompts, references)
     ]
 
-def compute_metrics(preds, labels, tokenizer):
-    logits = np.argmax(preds, axis=-1)
-    predictions = tokenizer.batch_decode(logits, skip_special_tokens=True)
-    labels[labels < 0] = tokenizer.eos_token_id
-    references = tokenizer.batch_decode(labels, skip_special_tokens=True)
-
-    rouge = evaluate.load('rouge')
-    rouge_scores = rouge.compute(predictions=predictions, references=references)
-    return {'rouge1': rouge_scores['rouge1']}
-
 def fine_tune_loop(base_model_id, prompts, references, prompts_val, references_val, subset_name, use_cache=True):
     model_name = f"{base_model_id.split('/')[-1]}_{subset_name}"
     model_dir = os.path.join(cache_dir, model_name)
@@ -293,13 +283,12 @@ def fine_tune_loop(base_model_id, prompts, references, prompts_val, references_v
     valid_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask'], output_all_columns=True)
 
     train_bs = 128
-    valid_bs = 64
+    valid_bs = 32
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-    train_dataloader = DataLoader(train_dataset, batch_size=train_bs, shuffle=True, collate_fn=data_collator)
+    train_dataloader = DataLoader(train_dataset, batch_size=train_bs, shuffle=False, collate_fn=data_collator)
     tokenizer.padding_side = "left"
     valid_dataloader = DataLoader(valid_dataset, batch_size=valid_bs)
 
-    next(iter(valid_dataloader))
 
     # Optimizer & Scheduler
     optimizer = AdamW(model.parameters(), lr=2.5e-5, weight_decay=0.01)
@@ -314,44 +303,51 @@ def fine_tune_loop(base_model_id, prompts, references, prompts_val, references_v
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
+    rouge = evaluate.load('rouge')
+
 
     # Training Loop
     num_epochs = 1
-    eval_steps = 20
+    eval_steps = 50
+
+    def train_step(batch, step):
+        batch = {k: v.to(device) for k, v in batch.items()}
+        outputs = model(**batch)
+        loss = outputs.loss
+        loss.backward()
+        optimizer.step()
+        lr_scheduler.step()
+        optimizer.zero_grad()
+        writer.add_scalar("train/loss", loss.item(), epoch * len(train_dataloader) + step)
+        writer.add_scalar("train/epoch", epoch + step / len(train_dataloader), epoch * len(train_dataloader) + step)
+        return loss.item()
+
+    def validation(step):
+        model.eval()
+        predictions, references = [], []
+        with torch.no_grad():
+            for batch_valid in tqdm(valid_dataloader, desc='Validating...'):
+                batch_valid = {k: v.to(device) if k in ['input_ids', 'attention_mask', 'labels'] else v for k, v in batch_valid.items()}
+                outputs_valid = model.generate(input_ids=batch_valid['input_ids'], attention_mask=batch_valid['attention_mask'], max_new_tokens=128)
+                decoded_preds = tokenizer.batch_decode(outputs_valid, skip_special_tokens=True)
+                predictions.extend(decoded_preds)
+                references.extend(batch_valid['references'])
+        rouge_scores = rouge.compute(predictions=predictions, references=references)
+        writer.add_scalar("eval/rouge1", rouge_scores['rouge1'], epoch * len(train_dataloader) + step)
+        print(f"Validation ROUGE-1: {rouge_scores['rouge1']:.4f}")
+        model.train()
+
     for epoch in range(num_epochs):
         print(f'Epoch {epoch + 1}/{num_epochs}')
         model.train()
         total_loss = 0
         loop = tqdm(train_dataloader, leave=True)
         for step, batch in enumerate(loop):
-            batch = {k: v.to(device) for k, v in batch.items()}
-            outputs = model(**batch)
-            loss = outputs.loss
-            loss.backward()
-            optimizer.step()
-            lr_scheduler.step()
-            optimizer.zero_grad()
-            total_loss += loss.item()
-            writer.add_scalar("train/loss", loss.item(), epoch * len(train_dataloader) + step)
-            writer.add_scalar("train/epoch", epoch + step / len(train_dataloader), epoch * len(train_dataloader) + step)
-            loop.set_description(f"Loss: {loss.item():.4f}")
-
             if step % eval_steps == 0:
-                # Validation
-                model.eval()
-                predictions, references = [], []
-                with torch.no_grad():
-                    for batch in tqdm(valid_dataloader, desc='Validating...'):
-                        batch = {k: v.to(device) if k in ['input_ids', 'attention_mask', 'labels'] else v for k, v in batch.items()}
-                        outputs = model.generate(input_ids=batch['input_ids'], attention_mask=batch['attention_mask'], max_new_tokens=128)
-                        decoded_preds = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-                        predictions.extend(decoded_preds)
-                        references.extend(batch['references'])
-                rouge = evaluate.load('rouge')
-                rouge_scores = rouge.compute(predictions=predictions, references=references)
-                writer.add_scalar("eval/rouge1", rouge_scores['rouge1'], epoch * len(train_dataloader) + step)
-                print(f"Validation ROUGE-1: {rouge_scores['rouge1']:.4f}")
-                model.train()
+                validation(step)
+            loss = train_step(batch, step)
+            total_loss += loss
+            loop.set_description(f"Loss: {loss:.4f}")
         print(f"Epoch {epoch + 1}, Loss: {total_loss / len(train_dataloader)}")
 
     # Save model
