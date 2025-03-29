@@ -1,20 +1,19 @@
+import os
 from datetime import datetime
-
 import evaluate
+import numpy as np
+import torch
 from datasets import Dataset
+from dotenv import load_dotenv
 from peft import LoraConfig, get_peft_model
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from transformers import BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer, EvalPrediction, TrainingArguments, \
-    TrainerCallback, get_scheduler, DataCollatorWithPadding, DataCollatorForLanguageModeling, LlamaForCausalLM
-import torch
 from tqdm import tqdm
-from bert_score import score as bert_score
-import numpy as np
+from transformers import BitsAndBytesConfig, AutoModelForCausalLM, AutoTokenizer, EvalPrediction, get_scheduler, \
+    DataCollatorForLanguageModeling
 from trl import SFTTrainer, SFTConfig
-import os
-from dotenv import load_dotenv
+
 load_dotenv()
 
 cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "models")
