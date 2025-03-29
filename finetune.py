@@ -194,7 +194,6 @@ def fine_tune_model(base_model_id, prompts, references, prompts_val, references_
     torch.cuda.empty_cache()
     return model_dir
 
-
 def formatting_prompts_func(prompts, references):
     return [
         f"""Below is an instruction that describes a task. Write a response that appropriately completes the request.
@@ -206,6 +205,36 @@ def formatting_prompts_func(prompts, references):
                 """
         for prompt, reference in zip(prompts, references)
     ]
+
+from torch.utils.data import DataLoader
+from datasets import Dataset
+import numpy as np
+
+def get_data_loaders(prompts, references, subset, bs, formatting_fn, preprocess_fn, data_collator):
+    prompts, references = np.array(prompts), np.array(references)
+    domain_indices = []
+    domains = []
+    for s in subset:
+        index, value = s[0], s[1]
+        if value > 30:
+            domain_indices.append([index])
+            domains.append(index)
+        else:
+            d = np.argmax(utility[index, domains])
+            domain_indices[d].append(index)
+
+    data_loaders = []
+    for idx in domain_indices:
+        domain_prompts, domain_references = prompts[idx], references[idx]
+        text = formatting_fn(domain_prompts, domain_references)
+        ds = Dataset.from_dict({"text": text})
+        ds = ds.map(preprocess_fn, batched=True)
+        ds.set_format(type='torch', columns=['input_ids', 'attention_mask'])
+        dl = DataLoader(ds, batch_size=bs, shuffle=False, collate_fn=data_collator)
+        data_loaders.append(dl)
+    return data_loaders
+
+
 
 def fine_tune_loop(base_model_id, prompts, references, prompts_val, references_val, subset_name, use_cache=True):
     model_name = f"{base_model_id.split('/')[-1]}_{subset_name}"
