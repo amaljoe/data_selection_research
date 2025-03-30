@@ -34,7 +34,7 @@ from torch.utils.data import DataLoader
 from datasets import Dataset
 import numpy as np
 
-def get_data_loaders(prompts, references, subset, bs, formatting_fn, preprocess_fn, data_collator):
+def get_data_loaders(prompts, references, subset, bs, formatting_fn, preprocess_fn, data_collator, dl_type):
     prompts, references = np.array(prompts), np.array(references)
     domain_indices = []
     domains = []
@@ -57,15 +57,23 @@ def get_data_loaders(prompts, references, subset, bs, formatting_fn, preprocess_
         dl = DataLoader(ds, batch_size=bs, shuffle=False, collate_fn=data_collator)
         data_loaders.append(dl)
 
-    # domain_prompts, domain_references = prompts, references
-    # text = formatting_fn(domain_prompts, domain_references)
-    # ds = Dataset.from_dict({"text": text})
-    # ds = ds.map(preprocess_fn, batched=True)
-    # ds.set_format(type='torch', columns=['input_ids', 'attention_mask'])
-    # dl = DataLoader(ds, batch_size=bs, shuffle=False, collate_fn=data_collator)
-    return data_loaders
 
-def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_val, subset_name, use_cache=True):
+    if dl_type == 'ours':
+        return data_loaders
+    else:
+        domain_prompts, domain_references = prompts, references
+        text = formatting_fn(domain_prompts, domain_references)
+        ds = Dataset.from_dict({"text": text})
+        ds = ds.map(preprocess_fn, batched=True)
+        ds.set_format(type='torch', columns=['input_ids', 'attention_mask'])
+        if dl_type == 'ranked':
+            dl = DataLoader(ds, batch_size=bs, shuffle=False, collate_fn=data_collator)
+        else: # random
+            dl = DataLoader(ds, batch_size=bs, shuffle=True, collate_fn=data_collator)
+        return [dl]
+
+
+def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_val, subset_name, dl_type='ours', use_cache=True):
     model_name = f"{base_model_id.split('/')[-1]}_{subset_name}"
     model_dir = os.path.join(cache_dir, model_name)
 
@@ -83,7 +91,9 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
     ist = pytz.timezone('Asia/Kolkata')
     current_time = datetime.now(ist)
     formatted_time = current_time.strftime('%d-%m-%Y %H:%M:%S')
-    writer = SummaryWriter(log_dir=os.path.join(model_dir, "runs", formatted_time))
+    log_name = f'{dl_type} {formatted_time}'
+    print(f'Logging to {log_name}')
+    writer = SummaryWriter(log_dir=os.path.join(model_dir, "runs", log_name))
 
     # Model setup
     quant_storage_dtype = torch.bfloat16
@@ -143,7 +153,7 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
     mini_bs = 16
     valid_bs = 32
     eval_steps = 10
-    num_epochs = 1
+    num_epochs = 3
 
     # train_bs = 16
     # mini_bs = 4
@@ -154,7 +164,7 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
 
 
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-    train_dataloaders = get_data_loaders(prompts, references, subset, mini_bs, formatting_prompts_func, preprocess_function, data_collator)
+    train_dataloaders = get_data_loaders(prompts, references, subset, mini_bs, formatting_prompts_func, preprocess_function, data_collator, dl_type=dl_type)
 
     valid_dataloader = DataLoader(valid_dataset, shuffle=False, batch_size=valid_bs, collate_fn=data_collator)
 
@@ -212,14 +222,16 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
 
     dataloader_iters = [iter(dl) for dl in train_dataloaders]
     dynamic_weights = DynamicWeights([len(d) / num_batches for d in dataloader_iters])
+    num_mini_batches = train_bs // mini_bs
+    num_steps_per_epoch = num_batches // num_mini_batches
     for epoch in range(num_epochs):
         print(f'Epoch {epoch + 1}/{num_epochs}')
         model.train()
-        loop = tqdm(range(num_batches // (train_bs // mini_bs)), leave=True)
+        loop = tqdm(range(num_steps_per_epoch), leave=True)
         for step in loop:
             if step % eval_steps == 0 or step == num_batches - 1:
                 perplexity = validation()
-                writer.add_scalar("eval/perplexity", perplexity, epoch * num_batches + step)
+                writer.add_scalar("eval/perplexity", perplexity, epoch * num_steps_per_epoch + step)
             mini_batch_loss = 0
             for mini_step in range(train_bs // mini_bs):
                 try:
@@ -230,11 +242,11 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
                     batch = next(dataloader_iters[index])
                 loss = train_step(batch)
                 mini_batch_loss += loss
-                dynamic_weights.update(index, loss, epoch * num_batches + step * (train_bs // mini_bs) + mini_step + 1)
-            writer.add_scalar("train/loss", mini_batch_loss / (train_bs // mini_bs), epoch * num_batches + step)
-            writer.add_scalar("train/epoch", epoch + step / num_batches, epoch * num_batches + step)
+                dynamic_weights.update(index, loss, epoch * num_steps_per_epoch + step * num_mini_batches + mini_step + 1)
+            writer.add_scalar("train/loss", mini_batch_loss / num_mini_batches, epoch * num_steps_per_epoch + step)
+            writer.add_scalar("train/epoch", epoch + step / num_steps_per_epoch, epoch * num_steps_per_epoch + step)
             for i, p in enumerate(dynamic_weights.weights):
-                writer.add_scalar(f"weights/domain_{i}", p, epoch * num_batches + step)
+                writer.add_scalar(f"weights/domain_{i}", p, epoch * num_steps_per_epoch + step)
             loop.set_description(f"Loss: {loss:.4f}")
 
     # Save model
@@ -267,6 +279,6 @@ if __name__=='__main__':
 
     base_model_id = 'meta-llama/Llama-3.2-3B'
     # base_model_id = 'cache/models/Llama-3.2-3B_mix-instruct_train_21000_delift-se_0.3'
-    fine_tune_odm(base_model_id, s_prompts, s_references, prompts_val, references_val, ds_name, use_cache=False)
+    fine_tune_odm(base_model_id, s_prompts, s_references, prompts_val, references_val, ds_name, dl_type='ours', use_cache=False)
 
 # {'eval_loss': 2.4013614654541016, 'eval_rouge1': 0.5915068179332093, 'eval_runtime': 17.7148, 'eval_samples_per_second': 2.822, 'eval_steps_per_second': 0.395, 'eval_mean_token_accuracy': 0.5173488073050976, 'epoch': 1.0}
