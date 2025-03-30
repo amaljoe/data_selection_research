@@ -235,6 +235,13 @@ def get_data_loaders(prompts, references, subset, bs, formatting_fn, preprocess_
         ds.set_format(type='torch', columns=['input_ids', 'attention_mask'])
         dl = DataLoader(ds, batch_size=bs, shuffle=False, collate_fn=data_collator)
         data_loaders.append(dl)
+
+    # domain_prompts, domain_references = prompts, references
+    # text = formatting_fn(domain_prompts, domain_references)
+    # ds = Dataset.from_dict({"text": text})
+    # ds = ds.map(preprocess_fn, batched=True)
+    # ds.set_format(type='torch', columns=['input_ids', 'attention_mask'])
+    # dl = DataLoader(ds, batch_size=bs, shuffle=False, collate_fn=data_collator)
     return data_loaders
 
 def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_val, subset_name, use_cache=True):
@@ -251,8 +258,7 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
     else:
         print(f"Finetune: Fine-tuned model not found in cache. Training now 🏃")
 
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    writer = SummaryWriter(log_dir=os.path.join(model_dir, "runs", timestamp))
+    writer = SummaryWriter(log_dir=os.path.join(model_dir, "runs", "odm"))
 
     # Model setup
     quant_storage_dtype = torch.bfloat16
@@ -306,10 +312,11 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
     valid_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask'], output_all_columns=True)
 
     train_bs = 128
+    mini_bs = 16
     valid_bs = 32
 
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-    train_dataloaders = get_data_loaders(prompts, references, subset, train_bs, formatting_prompts_func, preprocess_function, data_collator)
+    train_dataloaders = get_data_loaders(prompts, references, subset, mini_bs, formatting_prompts_func, preprocess_function, data_collator)
 
     tokenizer.padding_side = "left"
     valid_dataloader = DataLoader(valid_dataset, batch_size=valid_bs)
@@ -345,8 +352,6 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
         optimizer.step()
         lr_scheduler.step()
         optimizer.zero_grad()
-        writer.add_scalar("train/loss", loss.item(), epoch * num_batches + step)
-        writer.add_scalar("train/epoch", epoch + step / num_batches, epoch * num_batches + step)
         return loss.item()
 
     def validation(step):
@@ -369,24 +374,26 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
     for epoch in range(num_epochs):
         print(f'Epoch {epoch + 1}/{num_epochs}')
         model.train()
-        total_loss = 0
-        loop = tqdm(range(num_batches), leave=True)
+        loop = tqdm(range(num_batches // (train_bs // mini_bs)), leave=True)
         for step in loop:
-            try:
-                index = random.choices(np.arange(len(dataloader_iters)), weights=dynamic_weights.weights)[0]
-                batch = next(dataloader_iters[index])
-            except StopIteration:
-                dataloader_iters[index] = iter(train_dataloaders[index])
-                batch = next(dataloader_iters[index])
             if step % eval_steps == 0 or step == num_batches - 1:
                 validation(step)
-            loss = train_step(batch, step)
-            total_loss += loss
-            probs = dynamic_weights.update(index, loss, epoch * num_batches + step + 1)
-            for i, p in enumerate(probs):
+            mini_batch_loss = 0
+            for mini_step in range(train_bs // mini_bs):
+                try:
+                    index = random.choices(np.arange(len(dataloader_iters)), weights=dynamic_weights.weights)[0]
+                    batch = next(dataloader_iters[index])
+                except StopIteration:
+                    dataloader_iters[index] = iter(train_dataloaders[index])
+                    batch = next(dataloader_iters[index])
+                loss = train_step(batch, step)
+                mini_batch_loss += loss
+                dynamic_weights.update(index, loss, epoch * num_batches + step * (train_bs // mini_bs) + mini_step + 1)
+            writer.add_scalar("train/loss", mini_batch_loss / (train_bs // mini_bs), epoch * num_batches + step)
+            writer.add_scalar("train/epoch", epoch + step / num_batches, epoch * num_batches + step)
+            for i, p in enumerate(dynamic_weights.weights):
                 writer.add_scalar(f"weights/domain_{i}", p, epoch * num_batches + step)
             loop.set_description(f"Loss: {loss:.4f}")
-        print(f"Epoch {epoch + 1}, Loss: {total_loss / num_batches}")
 
     # Save model
     print("Training complete. Saving model.")
