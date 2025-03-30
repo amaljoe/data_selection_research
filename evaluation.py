@@ -86,6 +86,7 @@ def compute_metrics(predictions, references, generation_name, device='cuda:0', b
 if __name__ == '__main__':
     from data_loader import get_mix_instruct
     from inference import generate_responses
-    prompts, references, ds_name = get_mix_instruct("train", 21000)
-    responses, generation_name = generate_responses(prompts, "microsoft/Phi-3-mini-128k-instruct", ds_name, 'cuda:3', batch_size=64)
-    print(compute_metrics(responses[:20], references[:20], generation_name + '_20', device='cuda:3', bs_bge=512))
+    prompts, references, ds_name = get_mix_instruct("validation", 50)
+    # 'meta-llama/Llama-3.2-3B' "cache/models/Llama-3.2-3B_mix-instruct_train_21000"
+    responses, generation_name = generate_responses(prompts, 'meta-llama/Llama-3.2-3B', ds_name, 'cuda:0', batch_size=64)
+    print(compute_metrics(responses, references, generation_name, device='cuda:0', bs_bge=512))

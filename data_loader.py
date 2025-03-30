@@ -6,7 +6,7 @@ load_dotenv()
 
 cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "datasets")
 
-def get_mix_instruct(split, max_length):
+def get_mix_instruct(split, max_length, seed=42):
     ds_name = f"mix-instruct_{split}_{max_length}"
     cache_file = os.path.join(cache_dir, f"{ds_name}.pkl")
     os.makedirs(os.path.dirname(cache_file), exist_ok=True)
@@ -15,7 +15,7 @@ def get_mix_instruct(split, max_length):
         ds = pd.read_pickle(cache_file)
     else:
         print(f'Dataset: {ds_name} not found in cache, downloading from huggingface 🏃')
-        ds = load_dataset("llm-blender/mix-instruct")[split].to_pandas()[:max_length]
+        ds = load_dataset("llm-blender/mix-instruct")[split].shuffle(seed=seed).to_pandas()[:max_length]
         ds.to_pickle(cache_file)
         print(f'Dataset: {ds_name} loaded and saved to cache ✅')
     # instruction and input splitted by new line (space is used in paper)
