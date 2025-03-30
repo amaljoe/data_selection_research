@@ -280,7 +280,7 @@ if __name__=='__main__':
     subset, subset_name = create_subset(utility, utility_name, k=1)
     s_prompts, s_references = get_subset(subset, prompts, references)
 
-    prompts_val, references_val, _ = get_mix_instruct("train", 5000)
+    prompts_val, references_val, _ = get_mix_instruct("validation", 5000)
 
     random.seed(42)  # Set seed for reproducibility
     selected_indices = random.sample(range(len(prompts_val)), 50)
@@ -289,6 +289,6 @@ if __name__=='__main__':
 
     base_model_id = 'meta-llama/Llama-3.2-3B'
     # base_model_id = 'cache/models/Llama-3.2-3B_mix-instruct_train_21000_delift-se_0.3'
-    fine_tune_odm(base_model_id, prompts, references, subset, utility, prompts_val, references_val, ds_name, dl_type='ranked', use_cache=False, tag=tag)
+    fine_tune_odm(base_model_id, prompts, references, subset, utility, prompts_val, references_val, ds_name, dl_type='random', use_cache=False, tag=tag)
 
 # {'eval_loss': 2.4013614654541016, 'eval_rouge1': 0.5915068179332093, 'eval_runtime': 17.7148, 'eval_samples_per_second': 2.822, 'eval_steps_per_second': 0.395, 'eval_mean_token_accuracy': 0.5173488073050976, 'epoch': 1.0}
