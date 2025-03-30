@@ -139,8 +139,14 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
     valid_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask'])
 
 
-    train_bs = 128
-    mini_bs = 16
+    # train_bs = 128
+    # mini_bs = 16
+    # valid_bs = 32
+    # eval_steps = 10
+    # num_epochs = 1
+
+    train_bs = 16
+    mini_bs = 4
     valid_bs = 32
     eval_steps = 10
     num_epochs = 1

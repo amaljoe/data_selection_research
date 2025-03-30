@@ -1,1 +1,1 @@
-rsync -av --delete ./cache/ ./cache_backup/
+rsync -av ./cache/ ./cache_backup/
