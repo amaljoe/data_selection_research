@@ -41,6 +41,6 @@ if __name__ == '__main__':
     from utility_functions.encodes import get_encodes_utility
 
     prompts, references, ds_name = get_mix_instruct("train", 21000)
-    utility, utility_name = get_encodes_utility(prompts, references, ds_name)
-    subset, subset_name = create_subset(utility, utility_name)
+    utility, utility_name = get_encodes_utility(prompts, references, ds_name + 't1', embedding_model_name="cache/models/bge-finetuned")
+    subset, subset_name = create_subset(utility, utility_name, k=1)
     s_prompts, s_references = get_subset(subset, prompts, references)

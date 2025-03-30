@@ -10,7 +10,7 @@ load_dotenv()
 
 cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "utility")
 
-def get_encodes_utility(prompts, references, dataset_name):
+def get_encodes_utility(prompts, references, dataset_name, embedding_model_name='BAAI/bge-large-en-v1.5'):
     utility_name = f'{dataset_name}_encodes'
     cache_file = os.path.join(cache_dir, f"{utility_name}.pkl")
     os.makedirs(os.path.dirname(cache_file), exist_ok=True)
@@ -19,14 +19,14 @@ def get_encodes_utility(prompts, references, dataset_name):
         with open(cache_file, 'rb') as f:
             return pickle.load(f), utility_name
     print(f'Utility: {utility_name} not found in cache, computing now 🏃')
-    utility = encode(prompts, references).to("cpu")
+    utility = encode(prompts, references, embedding_model_name).to("cpu")
     utility = np.array(utility)
     with open(cache_file, 'wb') as f:
         pickle.dump(utility, f)
     # print(f'Utility: {utility_name} computed and saved to cache ✅')
     return utility, utility_name
 
-def encode(prompts, references, embedding_model_name='BAAI/bge-large-en-v1.5'):
+def encode(prompts, references, embedding_model_name):
     tokenizer = AutoTokenizer.from_pretrained(embedding_model_name)
     tokenizer.max_subtokens_sequence_length = 512
     tokenizer.model_max_length = 512
