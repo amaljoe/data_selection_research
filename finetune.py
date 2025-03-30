@@ -139,17 +139,17 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
     valid_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask'])
 
 
-    # train_bs = 128
-    # mini_bs = 16
-    # valid_bs = 32
-    # eval_steps = 10
-    # num_epochs = 1
-
-    train_bs = 16
-    mini_bs = 4
+    train_bs = 128
+    mini_bs = 16
     valid_bs = 32
     eval_steps = 10
     num_epochs = 1
+
+    # train_bs = 16
+    # mini_bs = 4
+    # valid_bs = 32
+    # eval_steps = 10
+    # num_epochs = 1
 
 
 
@@ -253,12 +253,18 @@ if __name__=='__main__':
     from utility_functions.delift_se import get_delift_se_utility
     from subset import create_subset, get_subset
 
-    prompts, references, ds_name = get_mix_instruct("train", 210)
+    prompts, references, ds_name = get_mix_instruct("train", 21000)
     utility, utility_name = get_delift_se_utility(prompts, references, ds_name)
     subset, subset_name = create_subset(utility, utility_name, k=1)
     s_prompts, s_references = get_subset(subset, prompts, references)
 
-    prompts_val, references_val, ds_name_valid = get_mix_instruct("validation", 50)
+    prompts_val, references_val, _ = get_mix_instruct("validation", 5000)
+
+    random.seed(42)  # Set seed for reproducibility
+    selected_indices = random.sample(range(len(prompts_val)), 50)
+    prompts_val = [prompts_val[i] for i in selected_indices]
+    references_val = [references_val[i] for i in selected_indices]
+
     base_model_id = 'meta-llama/Llama-3.2-3B'
     # base_model_id = 'cache/models/Llama-3.2-3B_mix-instruct_train_21000_delift-se_0.3'
     fine_tune_odm(base_model_id, s_prompts, s_references, prompts_val, references_val, ds_name, use_cache=False)
