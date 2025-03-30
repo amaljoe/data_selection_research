@@ -198,25 +198,29 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
 
 
     def validation():
-        total_loss = 0.0
+        total_weighted_loss = 0.0
         num_tokens = 0
-
+        total_loss = 0.0
+        num_batches = 0
         model.eval()
         with torch.no_grad():
             for batch in tqdm(valid_dataloader, desc='Validating...'):
                 batch = {k: v.to(device) for k, v in batch.items()}
                 outputs = model(**batch)
                 loss = outputs.loss
-                total_loss += loss.item() * batch['input_ids'].numel()
+                total_loss += loss.item()
+                num_batches += 1
+                total_weighted_loss += loss.item() * batch['input_ids'].numel()
                 num_tokens += batch['input_ids'].numel()
 
         model.train()
 
         # Calculate average loss and perplexity
-        avg_loss = total_loss / num_tokens
-        perplexity = torch.exp(torch.tensor(avg_loss))
+        avg_loss = total_loss / num_batches
+        avg_weighted_loss = total_weighted_loss / num_tokens
+        perplexity = torch.exp(torch.tensor(avg_weighted_loss)).item()
 
-        return perplexity
+        return avg_loss, perplexity
 
 
 
@@ -230,7 +234,8 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
         loop = tqdm(range(num_steps_per_epoch), leave=True)
         for step in loop:
             if step % eval_steps == 0 or step == num_batches - 1:
-                perplexity = validation()
+                eval_loss, perplexity = validation()
+                writer.add_scalar("eval/loss", eval_loss, epoch * num_steps_per_epoch + step)
                 writer.add_scalar("eval/perplexity", perplexity, epoch * num_steps_per_epoch + step)
             mini_batch_loss = 0
             for mini_step in range(train_bs // mini_bs):
