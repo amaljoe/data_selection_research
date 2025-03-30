@@ -38,8 +38,9 @@ def get_subset(subset, prompts, references):
 if __name__ == '__main__':
     from data_loader import get_mix_instruct
     from utility_functions.delift_se import get_delift_se_utility
+    from utility_functions.encodes import get_encodes_utility
 
-    prompts, references, ds_name = get_mix_instruct("train", 1000)
-    utility, utility_name = get_delift_se_utility(prompts, references, ds_name)
+    prompts, references, ds_name = get_mix_instruct("train", 21000)
+    utility, utility_name = get_encodes_utility(prompts, references, ds_name)
     subset, subset_name = create_subset(utility, utility_name)
     s_prompts, s_references = get_subset(subset, prompts, references)
