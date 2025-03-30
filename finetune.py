@@ -34,7 +34,7 @@ from torch.utils.data import DataLoader
 from datasets import Dataset
 import numpy as np
 
-def get_data_loaders(prompts, references, subset, bs, formatting_fn, preprocess_fn, data_collator, dl_type):
+def get_data_loaders(prompts, references, subset, utility, bs, formatting_fn, preprocess_fn, data_collator, dl_type):
     prompts, references = np.array(prompts), np.array(references)
     domain_indices = []
     domains = []
@@ -61,7 +61,7 @@ def get_data_loaders(prompts, references, subset, bs, formatting_fn, preprocess_
     if dl_type == 'ours':
         return data_loaders
     else:
-        domain_prompts, domain_references = prompts, references
+        domain_prompts, domain_references = get_subset(subset, prompts, references)
         text = formatting_fn(domain_prompts, domain_references)
         ds = Dataset.from_dict({"text": text})
         ds = ds.map(preprocess_fn, batched=True)
@@ -73,7 +73,7 @@ def get_data_loaders(prompts, references, subset, bs, formatting_fn, preprocess_
         return [dl]
 
 
-def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_val, subset_name, dl_type='ours', use_cache=True):
+def fine_tune_odm(base_model_id, prompts, references, subset, utility, prompts_val, references_val, subset_name, dl_type='ours', use_cache=True, tag=None):
     model_name = f"{base_model_id.split('/')[-1]}_{subset_name}"
     model_dir = os.path.join(cache_dir, model_name)
 
@@ -91,7 +91,7 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
     ist = pytz.timezone('Asia/Kolkata')
     current_time = datetime.now(ist)
     formatted_time = current_time.strftime('%d-%m-%Y %H:%M:%S')
-    log_name = f'{dl_type} {formatted_time}'
+    log_name = f'{dl_type} {formatted_time}' if tag is None else f'{tag} | {dl_type} {formatted_time}'
     print(f'Logging to {log_name}')
     writer = SummaryWriter(log_dir=os.path.join(model_dir, "runs", log_name))
 
@@ -164,7 +164,7 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
 
 
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-    train_dataloaders = get_data_loaders(prompts, references, subset, mini_bs, formatting_prompts_func, preprocess_function, data_collator, dl_type=dl_type)
+    train_dataloaders = get_data_loaders(prompts, references, subset, utility, mini_bs, formatting_prompts_func, preprocess_function, data_collator, dl_type=dl_type)
 
     valid_dataloader = DataLoader(valid_dataset, shuffle=False, batch_size=valid_bs, collate_fn=data_collator)
 
@@ -266,6 +266,12 @@ def fine_tune_odm(base_model_id, prompts, references, prompts_val, references_va
 
 
 if __name__=='__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--tag', type=str, default=None, help='Tag name for logging')
+    args = parser.parse_args()
+    tag = args.tag
+
     from data_loader import get_mix_instruct
     from utility_functions.delift_se import get_delift_se_utility
     from subset import create_subset, get_subset
@@ -275,7 +281,7 @@ if __name__=='__main__':
     subset, subset_name = create_subset(utility, utility_name, k=1)
     s_prompts, s_references = get_subset(subset, prompts, references)
 
-    prompts_val, references_val, _ = get_mix_instruct("validation", 5000)
+    prompts_val, references_val, _ = get_mix_instruct("train", 5000)
 
     random.seed(42)  # Set seed for reproducibility
     selected_indices = random.sample(range(len(prompts_val)), 50)
@@ -284,6 +290,6 @@ if __name__=='__main__':
 
     base_model_id = 'meta-llama/Llama-3.2-3B'
     # base_model_id = 'cache/models/Llama-3.2-3B_mix-instruct_train_21000_delift-se_0.3'
-    fine_tune_odm(base_model_id, s_prompts, s_references, prompts_val, references_val, ds_name, dl_type='ours', use_cache=False)
+    fine_tune_odm(base_model_id, prompts, references, subset, utility, prompts_val, references_val, ds_name, dl_type='ranked', use_cache=False, tag=tag)
 
 # {'eval_loss': 2.4013614654541016, 'eval_rouge1': 0.5915068179332093, 'eval_runtime': 17.7148, 'eval_samples_per_second': 2.822, 'eval_steps_per_second': 0.395, 'eval_mean_token_accuracy': 0.5173488073050976, 'epoch': 1.0}
