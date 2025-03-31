@@ -7,7 +7,7 @@ load_dotenv()
 cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "datasets")
 
 def get_mix_instruct(split, max_length, seed=42):
-    ds_name = f"mix-instruct_{split}_{max_length}"
+    ds_name = f"mix-instruct_{split}_{max_length}_{seed}"
     cache_file = os.path.join(cache_dir, f"{ds_name}.pkl")
     os.makedirs(os.path.dirname(cache_file), exist_ok=True)
     if os.path.exists(cache_file):

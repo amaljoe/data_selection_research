@@ -86,7 +86,12 @@ def compute_metrics(predictions, references, generation_name, device='cuda:0', b
 if __name__ == '__main__':
     from data_loader import get_mix_instruct
     from inference import generate_responses
-    prompts, references, ds_name = get_mix_instruct("validation", 50)
+    import random
+    prompts, references, ds_name = get_mix_instruct("validation", 5000)
+    random.seed(42)  # Set seed for reproducibility
+    selected_indices = random.sample(range(len(prompts)), 5000)
+    prompts = [prompts[i] for i in selected_indices]
+    references = [references[i] for i in selected_indices]
     # 'meta-llama/Llama-3.2-3B' "cache/models/Llama-3.2-3B_mix-instruct_train_21000"
-    responses, generation_name = generate_responses(prompts, 'meta-llama/Llama-3.2-3B', ds_name, 'cuda:0', batch_size=64)
+    responses, generation_name = generate_responses(prompts, "cache/models/Llama-3.2-3B_mix-instruct_train_21000_42_random_0.3", ds_name, 'cuda:0', max_length=50, batch_size=64)
     print(compute_metrics(responses, references, generation_name, device='cuda:0', bs_bge=512))
