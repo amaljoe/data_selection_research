@@ -276,17 +276,17 @@ if __name__=='__main__':
     from subset import create_subset, get_subset
 
     prompts, references, ds_name = get_mix_instruct("train", 21000)
-    utility, utility_name = get_encodes_utility(prompts, references, ds_name)
-    subset, subset_name = create_subset(utility, utility_name, k=1)
+    utility, utility_name = get_delift_se_utility(prompts, references, ds_name)
+    subset, subset_name = create_subset(utility, utility_name + 't1', k=1)
     s_prompts, s_references = get_subset(subset, prompts, references)
 
     # finetuned encoding
     # utility_enc2, utility_name_enc2 = get_encodes_utility(prompts, references, ds_name + 't1', embedding_model_name="cache/models/bge-finetuned")
     # subset_enc2, subset_name_enc2 = create_subset(utility_enc2, utility_name_enc2, k =1)
     #
-    prompts_val, references_val, _ = get_mix_instruct("train", 21000)
+    prompts_val, references_val, _ = get_mix_instruct("validation", 21000)
 
-    random.seed(43)  # Set seed for reproducibility
+    random.seed(42)  # Set seed for reproducibility
     selected_indices = random.sample(range(len(prompts_val)), 500)
     prompts_val = [prompts_val[i] for i in selected_indices]
     references_val = [references_val[i] for i in selected_indices]
