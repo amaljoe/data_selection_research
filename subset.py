@@ -17,7 +17,7 @@ def create_subset(data_sijs, utility_name, k=0.3):
             return pickle.load(f), subset_name
     print(f'Subset: {subset_name} not found in cache, computing now 🏃')
     # scale matrix
-    data_sijs = np.random.randn(len(data_sijs), len(data_sijs))
+    # data_sijs = np.random.randn(len(data_sijs), len(data_sijs))
     data_sijs = (data_sijs - data_sijs.min()) / (data_sijs.max() - data_sijs.min())
     n, _ = data_sijs.shape
     # use facility location to find subset
@@ -41,6 +41,6 @@ if __name__ == '__main__':
     from utility_functions.encodes import get_encodes_utility
 
     prompts, references, ds_name = get_mix_instruct("train", 21000)
-    utility, utility_name = get_encodes_utility(prompts, references, ds_name + 't1', embedding_model_name="cache/models/bge-finetuned")
-    subset, subset_name = create_subset(utility, utility_name, k=1)
+    utility, utility_name = get_encodes_utility(prompts, references, ds_name, embedding_model_name='BAAI/bge-large-en-v1.5')
+    subset, subset_name = create_subset(utility, utility_name + 't1', k=1)
     s_prompts, s_references = get_subset(subset, prompts, references)

@@ -151,7 +151,7 @@ def fine_tune_odm(base_model_id, prompts, references, subset, utility, prompts_v
     mini_bs = 16
     valid_bs = 32
     eval_steps = 10
-    num_epochs = 3
+    num_epochs = 1
 
     # train_bs = 16
     # mini_bs = 4
@@ -281,18 +281,18 @@ if __name__=='__main__':
     s_prompts, s_references = get_subset(subset, prompts, references)
 
     # finetuned encoding
-    utility_enc2, utility_name_enc2 = get_encodes_utility(prompts, references, ds_name + 't1', embedding_model_name="cache/models/bge-finetuned")
-    subset_enc2, subset_name_enc2 = create_subset(utility_enc2, utility_name_enc2, k =1)
+    # utility_enc2, utility_name_enc2 = get_encodes_utility(prompts, references, ds_name + 't1', embedding_model_name="cache/models/bge-finetuned")
+    # subset_enc2, subset_name_enc2 = create_subset(utility_enc2, utility_name_enc2, k =1)
+    #
+    prompts_val, references_val, _ = get_mix_instruct("train", 21000)
 
-    prompts_val, references_val, _ = get_mix_instruct("validation", 5000)
-
-    random.seed(42)  # Set seed for reproducibility
-    selected_indices = random.sample(range(len(prompts_val)), 50)
+    random.seed(43)  # Set seed for reproducibility
+    selected_indices = random.sample(range(len(prompts_val)), 500)
     prompts_val = [prompts_val[i] for i in selected_indices]
     references_val = [references_val[i] for i in selected_indices]
 
     base_model_id = 'meta-llama/Llama-3.2-3B'
     # base_model_id = 'cache/models/Llama-3.2-3B_mix-instruct_train_21000_delift-se_0.3'
-    fine_tune_odm(base_model_id, prompts, references, subset_enc2, utility_enc2, prompts_val, references_val, ds_name, dl_type='ranked', use_cache=False, tag=tag)
+    fine_tune_odm(base_model_id, prompts, references, subset, utility, prompts_val, references_val, ds_name, dl_type='ranked', use_cache=False, tag=tag)
 
 # {'eval_loss': 2.4013614654541016, 'eval_rouge1': 0.5915068179332093, 'eval_runtime': 17.7148, 'eval_samples_per_second': 2.822, 'eval_steps_per_second': 0.395, 'eval_mean_token_accuracy': 0.5173488073050976, 'epoch': 1.0}
