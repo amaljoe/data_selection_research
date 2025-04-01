@@ -10,8 +10,8 @@ load_dotenv()
 
 cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "generated_texts")
 
-def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch_size=8, max_length=100, use_cache=True):
-    model_name_short = model_name.split('/')[-1]
+def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch_size=8, max_length=100, use_cache=True, tokenizer_name=None):
+    model_name_short = model_name.split('/')[-1] if len(model_name.split('/')[-1]) > 0 else model_name.split('/')[-2]
     generation_name = f'{dataset_name}_{model_name_short}_{max_length}'
     cache_file = os.path.join(cache_dir, f"{generation_name}.pkl")
     os.makedirs(os.path.dirname(cache_file), exist_ok=True)
@@ -24,7 +24,8 @@ def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch
     else:
         print(f'Generation: {generation_name} not found in cache, generating responses 🏃')
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, padding_side="left")
+    tokenizer_name = tokenizer_name if tokenizer_name is not None else model_name
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, trust_remote_code=True, padding_side="left")
     tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16).to(device)
     def formatting_prompts_func(prompts):

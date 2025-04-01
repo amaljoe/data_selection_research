@@ -158,12 +158,16 @@ if __name__ == '__main__':
     mp.set_start_method("spawn", force=True)
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default="meta-llama/Llama-3.2-3B")
-    model = parser.parse_args().model
+    parser.add_argument('--tokenizer', type=str, default=None)
+    args = parser.parse_args()
+    model = args.model
+    tokenizer = args.tokenizer
+    print(model)
     prompts, references, ds_name = get_mix_instruct("validation", 5000)
     random.seed(42)  # Set seed for reproducibility
-    selected_indices = random.sample(range(len(prompts)), 5000)
-    prompts = [prompts[i] for i in selected_indices]
-    references = [references[i] for i in selected_indices]
+    # selected_indices = random.sample(range(len(prompts)), 5000)
+    # prompts = [prompts[i] for i in selected_indices]
+    # references = [references[i] for i in selected_indices]
     # 'meta-llama/Llama-3.2-3B' "cache/models/Llama-3.2-3B_mix-instruct_train_21000"
-    responses, generation_name = generate_responses(prompts, model, ds_name, 'cuda:0', max_length=50, batch_size=64)
+    responses, generation_name = generate_responses(prompts, model, ds_name, 'cuda:0', max_length=150, batch_size=64, tokenizer_name=tokenizer)
     print(compute_metrics(responses, references, generation_name, device='cuda:0', bs_bge=512))
