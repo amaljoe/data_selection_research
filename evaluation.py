@@ -23,7 +23,7 @@ def evaluate_rouge(predictions, references, batch_size):
         batch_references = references[i:i+batch_size]
         batch_scores = rouge_metric.compute(predictions=batch_predictions, references=batch_references)['rouge1']
         scores.append(batch_scores)
-    return np.mean(scores)
+    return np.mean(scores).item()
 
 def evaluate_bge(predictions, references, device, batch_size):
     embedding_tokenizer = AutoTokenizer.from_pretrained('BAAI/bge-large-en-v1.5')
@@ -53,7 +53,7 @@ def evaluate_bge(predictions, references, device, batch_size):
         scores = (ref_embs * pred_embs).sum(dim=1).cpu().numpy()
         metrics.extend(scores)
 
-    return np.mean(metrics)
+    return np.mean(metrics).item()
 
 def evaluate_laj(predictions, prompts, references, return_individual=False, bs = 16):
     """
@@ -125,7 +125,7 @@ def evaluate_laj(predictions, prompts, references, return_individual=False, bs =
     if return_individual:
         return np.array(metrics)
     else:
-        return np.array(metrics).mean()
+        return np.array(metrics).mean().item()
 
 def compute_metrics(predictions, prompts, references, generation_name, device='cuda:0', bs_bge=512, bs_rouge=4096, metrics=['bge', 'rouge', 'laj'], use_cache=True):
     valid_metrics = set(['bge', 'rouge', 'laj'])

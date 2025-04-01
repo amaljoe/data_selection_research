@@ -36,6 +36,7 @@ def parse_arguments():
     parser.add_argument("--base_model_id", type=str, default='meta-llama/Llama-3.2-3B', help="Base model identifier")
     parser.add_argument("--epochs", type=int, default=3, help="Number of fine-tuning epochs")
     parser.add_argument("--generation_max_length", type=int, default=150, help="Maximum generation length during inference")
+    parser.add_argument("--tag", type=str, default=None, help="Tag name to uniquely identify experiments")
 
     return parser.parse_args()
 
@@ -44,6 +45,8 @@ if __name__ == "__main__":
 
     formatted_time = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d-%m-%Y-%H:%M:%S')
     experiment_name = f'{args.base_model_id}_{args.method}_{formatted_time}'
+    if args.tag is not None:
+        experiment_name += args.tag
 
     print(f'\nRunning experiment "{experiment_name}" with parameters:')
     max_key_length = max(len(str(k)) for k in vars(args).keys())
@@ -63,15 +66,17 @@ if __name__ == "__main__":
     prompts_val, references_val, ds_name_val = get_mix_instruct("validation", args.val_length, seed=args.val_seed)
     model_dir = args.base_model_id
     if args.method != 'initial':
-        model_dir = fine_tune_model(args.base_model_id, prompts, references, prompts_val, references_val, ds_name, epochs=args.epochs)
+        model_dir = fine_tune_model(args.base_model_id, prompts, references, prompts_val, references_val, ds_name, epochs=args.epochs, tag=args.tag)
     responses, generation_name = generate_responses(prompts_val, model_dir, ds_name_val, max_length=args.generation_max_length)
     metrics = compute_metrics(responses, prompts_val, references_val, generation_name)
 
     results = {
+        "experiment_name": experiment_name,
         "parameters": vars(args),
         "metrics": metrics
     }
     log_file = os.path.join(cache_dir, f'{experiment_name}.txt')
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
     with open(log_file, "w") as f:
         json.dump(results, f, indent=4)
 
