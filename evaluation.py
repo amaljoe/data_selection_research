@@ -55,7 +55,7 @@ def evaluate_bge(predictions, references, device, batch_size):
 
     return np.mean(metrics)
 
-def evaluate_laj(predictions, refs, return_individual=False):
+def evaluate_laj(predictions, prompts, references, return_individual=False, bs = 16):
     """
     Calculates the similarity between predictions and references using Prometheus (LLM-as-a-Judge).
 
@@ -69,8 +69,7 @@ def evaluate_laj(predictions, refs, return_individual=False):
     model = VLLM(model="prometheus-eval/prometheus-7b-v2.0")
     judge = PrometheusEval(model=model, absolute_grade_template=ABSOLUTE_PROMPT)
 
-    instructions = refs[0]
-    references = refs[1]
+    instructions = prompts
 
     rubric_data = {
         "criteria": """Evaluate the model's ability to follow instructions and deliver a high-quality response across the following dimensions:
@@ -97,15 +96,25 @@ def evaluate_laj(predictions, refs, return_individual=False):
     score_rubric = SCORE_RUBRIC_TEMPLATE.format(**rubric_data)
 
     metrics = []
-    for i, r, p in tqdm(zip(instructions, references, predictions)):
-        feedback, score = judge.single_absolute_grade(
-            instruction=i,
-            response=p,
-            rubric=score_rubric,
-            reference_answer=r
-        )
-
-        metrics.append(score)
+    # for i in tqdm(range(0, len(instructions), bs), desc='Evaluating LAJ'):
+    #     batch_instructions = instructions[i: i + bs]
+    #     batch_references = references[i: i + bs]
+    #     batch_responses = responses[i: i + bs]
+    #     feedback, score = judge.absolute_grade(
+    #         instructions=batch_instructions,
+    #         responses=batch_responses,
+    #         rubric=score_rubric,
+    #         reference_answers=batch_references
+    #     )
+    #
+    #     metrics.append(score)
+    feedback, score = judge.absolute_grade(
+        instructions=instructions,
+        responses=responses,
+        rubric=score_rubric,
+        reference_answers=references
+    )
+    metrics = score
 
     # clean up memory
     del model
@@ -117,7 +126,7 @@ def evaluate_laj(predictions, refs, return_individual=False):
     else:
         return np.array(metrics).mean()
 
-def compute_metrics(predictions, references, generation_name, device='cuda:0', bs_bge=512, bs_rouge=4096, metrics=['bge', 'rouge', 'laj'], use_cache=True):
+def compute_metrics(predictions, prompts, references, generation_name, device='cuda:0', bs_bge=512, bs_rouge=4096, metrics=['bge', 'rouge', 'laj'], use_cache=True):
     valid_metrics = set(['bge', 'rouge', 'laj'])
     metrics_dict = {}
     for metric in metrics:
@@ -144,7 +153,7 @@ def compute_metrics(predictions, references, generation_name, device='cuda:0', b
             elif metric == 'bge':
                 metrics[metric] = evaluate_bge(predictions, references, device, bs_bge)
             elif metric == 'laj':
-                metrics[metric] = evaluate_laj(predictions, references)
+                metrics[metric] = evaluate_laj(predictions, prompts, references)
             with open(cache_file, 'wb') as f:
                 pickle.dump(metrics[metric], f)
             print(f'Evaluate: {metric_name} computed and saved to cache ✅')
@@ -170,4 +179,4 @@ if __name__ == '__main__':
     # references = [references[i] for i in selected_indices]
     # 'meta-llama/Llama-3.2-3B' "cache/models/Llama-3.2-3B_mix-instruct_train_21000"
     responses, generation_name = generate_responses(prompts, model, ds_name, 'cuda:0', max_length=150, batch_size=64, tokenizer_name=tokenizer)
-    print(compute_metrics(responses, references, generation_name, device='cuda:0', bs_bge=512))
+    print(compute_metrics(responses, prompts, references, generation_name, device='cuda:0', bs_bge=512, metrics=['rouge', 'bge', 'laj']))
