@@ -70,6 +70,7 @@ def evaluate_laj(predictions, prompts, references, return_individual=False, bs =
     judge = PrometheusEval(model=model, absolute_grade_template=ABSOLUTE_PROMPT)
 
     instructions = prompts
+    responses = predictions
 
     rubric_data = {
         "criteria": """Evaluate the model's ability to follow instructions and deliver a high-quality response across the following dimensions:
