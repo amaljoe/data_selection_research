@@ -24,7 +24,7 @@ def parse_arguments():
     parser.add_argument("--train_seed", type=int, default=42, help="Random seed for training data selection")
     parser.add_argument("--train_length", type=int, default=21000, help="Number of training samples")
     parser.add_argument("--val_seed", type=int, default=42, help="Random seed for validation data selection")
-    parser.add_argument("--val_length", type=int, default=5000, help="Number of validation samples")
+    parser.add_argument("--val_length", type=int, default=1000, help="Number of validation samples")
 
     # Subset selection parameters
     parser.add_argument("--method", type=str, choices=['initial', 'random', 'delift-se', 'full'], default='initial',
@@ -46,8 +46,9 @@ if __name__ == "__main__":
     experiment_name = f'{args.base_model_id}_{args.method}_{formatted_time}'
 
     print(f'\nRunning experiment "{experiment_name}" with parameters:')
+    max_key_length = max(len(str(k)) for k in vars(args).keys())
     for k, v in vars(args).items():
-        print(f"{k}\t: {v}")
+        print(f"{k:<{max_key_length}} : {v}")
     print("")
 
     prompts, references, ds_name = get_mix_instruct("train", args.train_length, seed=args.train_seed)
@@ -59,12 +60,12 @@ if __name__ == "__main__":
         subset_indices = random.Random(args.random_seed).sample(range(len(prompts)), int(args.subset_size * len(prompts)))
         prompts = [prompts[i] for i in subset_indices]
         references = [references[i] for i in subset_indices]
-    prompts_val, references_val, _ = get_mix_instruct("validation", args.val_length, seed=args.val_seed)
+    prompts_val, references_val, ds_name_val = get_mix_instruct("validation", args.val_length, seed=args.val_seed)
     model_dir = args.base_model_id
     if args.method != 'initial':
         model_dir = fine_tune_model(args.base_model_id, prompts, references, prompts_val, references_val, ds_name, epochs=args.epochs)
-    responses, generation_name = generate_responses(prompts, model_dir, ds_name, max_length=args.generation_max_length)
-    metrics = compute_metrics(responses, prompts, references, generation_name)
+    responses, generation_name = generate_responses(prompts_val, model_dir, ds_name_val, max_length=args.generation_max_length)
+    metrics = compute_metrics(responses, prompts_val, references_val, generation_name)
 
     results = {
         "parameters": vars(args),
@@ -75,5 +76,6 @@ if __name__ == "__main__":
         json.dump(results, f, indent=4)
 
     print(f"\nResults for the experiment: {experiment_name}")
+    max_key_length = max(len(str(k)) for k in metrics.keys())
     for k, v in metrics.items():
-        print(f"{k}\t: {v}")
+        print(f"{k:<{max_key_length}} : {v}")

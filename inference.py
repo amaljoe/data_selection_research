@@ -45,7 +45,7 @@ def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch
     for batch in tqdm(dataloader, desc="Generating responses"):
         inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True).to(device)
         with torch.no_grad():
-            outputs = model.generate(**inputs, max_new_tokens=max_length, min_p=0.1, temperature=0.2)
+            outputs = model.generate(**inputs, max_new_tokens=max_length, min_p=0.1, temperature=0.2, pad_token_id=model.config.eos_token_id)
         new_tokens = outputs[:, inputs.input_ids.shape[1]:]
         batch_gen_texts = tokenizer.batch_decode(new_tokens, skip_special_tokens=True)
         batch_gen_texts = [gen_text.replace("\n", " ") for gen_text in batch_gen_texts]
