@@ -10,7 +10,7 @@ load_dotenv()
 
 cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "generated_texts")
 
-def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch_size=8, max_length=100, use_cache=True, tokenizer_name=None):
+def generate_responses(prompts, model_name, dataset_name, device='cuda:0', batch_size=64, max_length=100, use_cache=True, tokenizer_name=None):
     model_name_short = model_name.split('/')[-1] if len(model_name.split('/')[-1]) > 0 else model_name.split('/')[-2]
     generation_name = f'{dataset_name}_{model_name_short}_{max_length}'
     cache_file = os.path.join(cache_dir, f"{generation_name}.pkl")
