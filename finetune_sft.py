@@ -22,13 +22,14 @@ cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "models")
 def fine_tune_model(base_model_id, prompts, references, prompts_val, references_val, subset_name, use_cache=True, tag=None, epochs=3, train_bs=24, eval_bs=24):
     model_name = f"{base_model_id.split('/')[-1]}_{subset_name}"
     model_dir = os.path.join(cache_dir, model_name)
+    adapter_config_path = os.path.join(model_dir, 'adapter_config.json')
 
     os.makedirs(os.path.dirname(model_dir), exist_ok=True)
 
-    if os.path.exists(model_dir) and use_cache:
+    if os.path.exists(adapter_config_path) and use_cache:
         print(f"Finetune: Fine-tuned model found in cache. Skipping Training ✅")
         return model_dir
-    elif os.path.exists(model_dir) and not use_cache:
+    elif os.path.exists(adapter_config_path) and not use_cache:
         print(f"Finetune: Fine-tuned model found in cache. Invalidating cache and training now 🏃")
     else:
         print(f"Finetune: Fine-tuned model not found in cache. Training now 🏃")
