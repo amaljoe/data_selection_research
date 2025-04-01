@@ -33,7 +33,7 @@ def parse_arguments():
     parser.add_argument("--random_seed", type=int, default=42, help="Seed for random subset selection")
 
     # Model parameters
-    parser.add_argument("--base_model_id", type=str, default='meta-llama/Llama-3.2-3B', help="Base model identifier")
+    parser.add_argument("--model", type=str, default='meta-llama/Llama-3.2-3B', help="Base model identifier")
     parser.add_argument("--epochs", type=int, default=3, help="Number of fine-tuning epochs")
     parser.add_argument("--generation_max_length", type=int, default=150, help="Maximum generation length during inference")
     parser.add_argument("--tag", type=str, default=None, help="Tag name to uniquely identify experiments")
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     args = parse_arguments()
 
     formatted_time = datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d-%m-%Y-%H:%M:%S')
-    experiment_name = f'{args.base_model_id}_{args.method}_{formatted_time}'
+    experiment_name = f'{args.model}_{args.method}_{formatted_time}'
     if args.tag is not None:
         experiment_name += args.tag
 
@@ -64,9 +64,9 @@ if __name__ == "__main__":
         prompts = [prompts[i] for i in subset_indices]
         references = [references[i] for i in subset_indices]
     prompts_val, references_val, ds_name_val = get_mix_instruct("validation", args.val_length, seed=args.val_seed)
-    model_dir = args.base_model_id
+    model_dir = args.model
     if args.method != 'initial':
-        model_dir = fine_tune_model(args.base_model_id, prompts, references, prompts_val, references_val, ds_name, epochs=args.epochs, tag=args.tag)
+        model_dir = fine_tune_model(args.model, prompts, references, prompts_val, references_val, ds_name, epochs=args.epochs, tag=args.tag)
     responses, generation_name = generate_responses(prompts_val, model_dir, ds_name_val, max_length=args.generation_max_length)
     metrics = compute_metrics(responses, prompts_val, references_val, generation_name)
 
