@@ -19,7 +19,7 @@ load_dotenv()
 cache_dir = os.path.join(os.environ.get("CACHE_DIR", "./cache"), "models")
 
 
-def fine_tune_model(base_model_id, prompts, references, prompts_val, references_val, subset_name, use_cache=True, tag=None, epochs=3, train_bs=24, eval_bs=24):
+def fine_tune_model(base_model_id, prompts, references, prompts_val, references_val, subset_name, use_cache=True, tag=None, epochs=3, train_bs=24, eval_bs=24, eval_strategy="no", save_strategy="no"):
     model_name = f"{base_model_id.split('/')[-1]}_{subset_name}"
     model_dir = os.path.join(cache_dir, model_name)
     adapter_config_path = os.path.join(model_dir, 'adapter_config.json')
@@ -131,8 +131,8 @@ def fine_tune_model(base_model_id, prompts, references, prompts_val, references_
         per_device_eval_batch_size=eval_bs,
         gradient_accumulation_steps=1,
         eval_accumulation_steps=1,
-        eval_strategy="epoch",
-        save_strategy="epoch",
+        eval_strategy=eval_strategy,
+        save_strategy=save_strategy,
         save_total_limit=1,
         learning_rate=2.5e-5,
         bf16=True,

@@ -55,18 +55,20 @@ if __name__ == "__main__":
     print("")
 
     prompts, references, ds_name = get_mix_instruct("train", args.train_length, seed=args.train_seed)
+    subset_name = ds_name
     if args.method == 'delift-se':
         utility, utility_name = get_delift_se_utility(prompts, references, ds_name)
         subset, subset_name = create_subset(utility, utility_name, k=args.subset_size)
         prompts, references = get_subset(subset, prompts, references)
     elif args.method == 'random':
+        subset_name = f'{ds_name}_random_{args.subset_size}'
         subset_indices = random.Random(args.random_seed).sample(range(len(prompts)), int(args.subset_size * len(prompts)))
         prompts = [prompts[i] for i in subset_indices]
         references = [references[i] for i in subset_indices]
     prompts_val, references_val, ds_name_val = get_mix_instruct("validation", args.val_length, seed=args.val_seed)
     model_dir = args.model
     if args.method != 'initial':
-        model_dir = fine_tune_model(args.model, prompts, references, prompts_val, references_val, ds_name, epochs=args.epochs, tag=args.tag)
+        model_dir = fine_tune_model(args.model, prompts, references, prompts_val, references_val, subset_name, epochs=args.epochs, tag=args.tag)
     responses, generation_name = generate_responses(prompts_val, model_dir, ds_name_val, max_length=args.generation_max_length)
     metrics = compute_metrics(responses, prompts_val, references_val, generation_name)
 

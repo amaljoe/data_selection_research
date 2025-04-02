@@ -115,7 +115,7 @@ def evaluate_laj(predictions, prompts, references, return_individual=False, bs =
         rubric=score_rubric,
         reference_answers=references
     )
-    metrics = score
+    metrics = [x for x in score if x is not None]
 
     # clean up memory
     del model
