@@ -36,6 +36,7 @@ def parse_arguments():
     parser.add_argument("--model", type=str, default='meta-llama/Llama-3.2-3B', help="Base model identifier")
     parser.add_argument("--epochs", type=int, default=3, help="Number of fine-tuning epochs")
     parser.add_argument("--generation_max_length", type=int, default=150, help="Maximum generation length during inference")
+    parser.add_argument("--generation_batch_size", type=int, default=64, help="Batch size during inference")
     parser.add_argument("--tag", type=str, default=None, help="Tag name to uniquely identify experiments")
 
     return parser.parse_args()
@@ -69,7 +70,7 @@ if __name__ == "__main__":
     model_dir = args.model
     if args.method != 'initial':
         model_dir = fine_tune_model(args.model, prompts, references, prompts_val, references_val, subset_name, epochs=args.epochs, tag=args.tag)
-    responses, generation_name = generate_responses(prompts_val, model_dir, ds_name_val, max_length=args.generation_max_length)
+    responses, generation_name = generate_responses(prompts_val, model_dir, ds_name_val, max_length=args.generation_max_length, batch_size=args.generation_batch_size)
     metrics = compute_metrics(responses, prompts_val, references_val, generation_name)
 
     results = {
