@@ -27,12 +27,12 @@ def fine_tune_model(base_model_id, prompts, references, prompts_val, references_
     os.makedirs(os.path.dirname(model_dir), exist_ok=True)
 
     if os.path.exists(adapter_config_path) and use_cache:
-        print(f"Finetune: Fine-tuned model found in cache. Skipping Training ✅")
+        print(f"Finetune: Fine-tuned model {model_name} found in cache. Skipping Training ✅")
         return model_dir
     elif os.path.exists(adapter_config_path) and not use_cache:
-        print(f"Finetune: Fine-tuned model found in cache. Invalidating cache and training now 🏃")
+        print(f"Finetune: Fine-tuned model {model_name} found in cache. Invalidating cache and training now 🏃")
     else:
-        print(f"Finetune: Fine-tuned model not found in cache. Training now 🏃")
+        print(f"Finetune: Fine-tuned model {model_name} not found in cache. Training now 🏃")
 
     # Get current time in IST
     ist = pytz.timezone('Asia/Kolkata')
@@ -173,7 +173,7 @@ def fine_tune_model(base_model_id, prompts, references, prompts_val, references_
     if hasattr(trainer, 'is_fsdp_enabled') and trainer.is_fsdp_enabled:
         trainer.accelerator.state.fsdp_plugin.set_state_dict_type("FULL_STATE_DICT")
     trainer.save_model()
-    print(f"Finetune: Model fine-tuning completed and saved to cache ✅")
+    print(f"Finetune: Model fine-tuning completed for {model_name} and saved to cache ✅")
 
     del model
     torch.cuda.empty_cache()
