@@ -59,7 +59,9 @@ def get_data_loaders(prompts, references, subset, utility, bs, formatting_fn, pr
             data_loaders.append(dl)
         return data_loaders
     else:
-        domain_prompts, domain_references = get_subset(subset, prompts, references)
+        domain_prompts, domain_references = prompts, references
+        if dl_type == 'ranked':
+            domain_prompts, domain_references = get_subset(subset, prompts, references)
         text = formatting_fn(domain_prompts, domain_references)
         ds = Dataset.from_dict({"text": text})
         ds = ds.map(preprocess_fn, batched=True)
@@ -150,8 +152,8 @@ def fine_tune_odm(base_model_id, prompts, references, subset, utility, prompts_v
     train_bs = 128
     mini_bs = 16
     valid_bs = 32
-    eval_steps = 10
-    num_epochs = 3
+    eval_steps = 100
+    num_epochs = 1
 
     # train_bs = 16
     # mini_bs = 4
@@ -231,7 +233,7 @@ def fine_tune_odm(base_model_id, prompts, references, subset, utility, prompts_v
         model.train()
         loop = tqdm(range(num_steps_per_epoch), leave=True)
         for step in loop:
-            if step % eval_steps == 0 or step == num_batches - 1:
+            if step % eval_steps == 0 or step == num_steps_per_epoch - 1:
                 eval_loss, perplexity = validation()
                 writer.add_scalar("eval/loss", eval_loss, epoch * num_steps_per_epoch + step)
                 writer.add_scalar("eval/perplexity", perplexity, epoch * num_steps_per_epoch + step)
@@ -270,29 +272,35 @@ if __name__=='__main__':
     args = parser.parse_args()
     tag = args.tag
 
-    from data_loader import get_mix_instruct
+    from data_loader import get_mix_instruct, get_mmlu
     from utility_functions.delift_se import get_delift_se_utility
     from utility_functions.encodes import get_encodes_utility
     from subset import create_subset, get_subset
 
-    prompts, references, ds_name = get_mix_instruct("train", 21000)
-    utility, utility_name = get_encodes_utility(prompts, references, ds_name)
-    subset, subset_name = create_subset(utility, utility_name, k=1)
-    s_prompts, s_references = get_subset(subset, prompts, references)
+    # prompts, references, ds_name = get_mix_instruct("train", 21000)
+    prompts, references, ds_name = get_mmlu("auxiliary_train")
+    # utility, utility_name = get_delift_se_utility(prompts, references, ds_name)
+    # subset, subset_name = create_subset(utility, utility_name, k=0.3)
+    # s_prompts, s_references = get_subset(subset, prompts, references)
+
+    # random.seed(42)  # Set seed for reproducibility
+    # selected_indices = random.sample(range(len(prompts)), int(0.3 * len(prompts)))
+    # s_prompts = [prompts[i] for i in selected_indices]
+    # s_references = [references[i] for i in selected_indices]
 
     # finetuned encoding
-    utility_enc2, utility_name_enc2 = get_encodes_utility(prompts, references, ds_name + 't1', embedding_model_name="cache/models/bge-finetuned")
-    subset_enc2, subset_name_enc2 = create_subset(utility_enc2, utility_name_enc2, k =1)
+    # utility_enc2, utility_name_enc2 = get_encodes_utility(prompts, references, ds_name + 't1', embedding_model_name="cache/models/bge-finetuned")
+    # subset_enc2, subset_name_enc2 = create_subset(utility_enc2, utility_name_enc2, k =1)
 
-    prompts_val, references_val, _ = get_mix_instruct("validation", 5000)
+    prompts_val, references_val, _ = get_mmlu("test")
 
     random.seed(42)  # Set seed for reproducibility
-    selected_indices = random.sample(range(len(prompts_val)), 50)
+    selected_indices = random.sample(range(len(prompts_val)), 500)
     prompts_val = [prompts_val[i] for i in selected_indices]
     references_val = [references_val[i] for i in selected_indices]
 
     base_model_id = 'meta-llama/Llama-3.2-3B'
     # base_model_id = 'cache/models/Llama-3.2-3B_mix-instruct_train_21000_delift-se_0.3'
-    fine_tune_odm(base_model_id, prompts, references, subset_enc2, utility_enc2, prompts_val, references_val, ds_name, dl_type='ranked', use_cache=False, tag=tag)
+    fine_tune_odm(base_model_id, prompts, references, None, None, prompts_val, references_val, ds_name, dl_type='random', use_cache=False, tag=tag)
 
 # {'eval_loss': 2.4013614654541016, 'eval_rouge1': 0.5915068179332093, 'eval_runtime': 17.7148, 'eval_samples_per_second': 2.822, 'eval_steps_per_second': 0.395, 'eval_mean_token_accuracy': 0.5173488073050976, 'epoch': 1.0}
