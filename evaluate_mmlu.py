@@ -31,17 +31,19 @@ def generate_prompt_shot(question, choices, examples):
 
     return shot_text + question_text
 
-def evaluate_mmlu(model, tokenizer, dataset):
+def evaluate_mmlu(model, tokenizer, dataset, num_shots, length, seed):
     correct = 0
     total = 0
+    if length is None or length > len(dataset):
+        length = len(dataset)
 
-    dataset = dataset.shuffle().select(range(len(dataset)))
+    dataset = dataset.shuffle(seed=seed).select(length)
 
     loop = tqdm(enumerate(dataset), total=len(dataset))
     for i, example in loop:
-        if i < 5:
+        if i < num_shots:
             continue
-        indices = range(i - 5, i)
+        indices = range(i - num_shots, i)
         examples = dataset.select(indices)
         answer = chr(65 + example['answer'])  # Convert index to A, B, C, or D
 
@@ -62,7 +64,14 @@ def evaluate_mmlu(model, tokenizer, dataset):
 if __name__=='__main__':
     parser = ArgumentParser()
     parser.add_argument("--model", type=str, default="meta-llama/Llama-3.2-3B")
-    model_name = parser.parse_args().model
+    parser.add_argument("--numShots", type=int, default=5)
+    parser.add_argument("--length", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args()
+    model_name = args.model
+    num_shots = args.numShots
+    length = args.length
+    seed = args.seed
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.bfloat16)
-    evaluate_mmlu(model, tokenizer, dataset)
+    evaluate_mmlu(model, tokenizer, dataset, num_shots, length, seed)
